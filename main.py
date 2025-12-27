@@ -1,5 +1,8 @@
 import sys
 import os
+import csv
+import json
+import datetime
 from dataclasses import dataclass
 
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
@@ -358,6 +361,14 @@ class MainWindow(QMainWindow):
         self.btn_stop.setEnabled(False)
         self.btn_stop.clicked.connect(self.stop_worker)
         left_layout.addWidget(self.btn_stop)
+        
+        # Export Button
+        self.btn_export = QPushButton("EXPORT SNAPSHOT")
+        self.btn_export.setObjectName("secondaryButton")
+        self.btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_export.clicked.connect(self.export_snapshot)
+        self.btn_export.setEnabled(False) # Disabled initially
+        left_layout.addWidget(self.btn_export)
 
         # --- Right Panel ---
         right_panel = QWidget()
@@ -517,6 +528,64 @@ class MainWindow(QMainWindow):
         msg.setDetailedText(report)
         msg.exec()
 
+    def export_snapshot(self):
+        if self.tree.topLevelItemCount() == 0:
+            QMessageBox.warning(self, "Export", "No data to export.")
+            return
+
+        # Default filename with timestamp
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        ip = self.input_ip.text().replace('.', '-')
+        default_name = f"snmp_snapshot_{ip}_{ts}.csv"
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Save Snapshot", default_name, "CSV Files (*.csv);;JSON Files (*.json)"
+        )
+        
+        if not file_path:
+            return
+
+        try:
+            is_json = file_path.lower().endswith('.json')
+            
+            # Gather Data
+            data = []
+            
+            # Iterate groups
+            for i in range(self.tree.topLevelItemCount()):
+                group_item = self.tree.topLevelItem(i)
+                group_name = group_item.text(0)
+                
+                # Iterate children
+                for j in range(group_item.childCount()):
+                    child = group_item.child(j)
+                    name = child.text(0)
+                    value = child.text(1)
+                    raw_val = child.data(1, Qt.ItemDataRole.UserRole)
+                    
+                    data.append({
+                        "Group": group_name,
+                        "Parameter": name,
+                        "Value": value,
+                        "Raw": str(raw_val) if raw_val else ""
+                    })
+
+            if is_json:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=4)
+            else:
+                # CSV Export
+                with open(file_path, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=["Group", "Parameter", "Value", "Raw"])
+                    writer.writeheader()
+                    writer.writerows(data)
+            
+            self.status_bar.setText(f" Snapshot saved to {os.path.basename(file_path)}")
+            QMessageBox.information(self, "Export Success", f"Successfully saved {len(data)} items.")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", f"Failed to save file:\n{str(e)}")
+
     def start_snmp_walk(self):
         if not self.input_ip.text():
             QMessageBox.warning(self, "Error", "IP Address is required")
@@ -534,6 +603,7 @@ class MainWindow(QMainWindow):
         self.oid_groups = {} # Reset groupings
         self.btn_connect.setEnabled(False)
         self.btn_stop.setEnabled(True)
+        self.btn_export.setEnabled(False) # Disable export during new scan
         self.status_bar.setText(" Scanning network device...")
 
         self.worker = SnmpWorker(config, self.mib_folder_path)
@@ -627,6 +697,7 @@ class MainWindow(QMainWindow):
         self.status_bar.setText(" Scan Complete.")
         self.btn_connect.setEnabled(True)
         self.btn_stop.setEnabled(False)
+        self.btn_export.setEnabled(self.tree.topLevelItemCount() > 0) # Enable export if data exists
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
