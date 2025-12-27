@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLabel, QLineEdit, QPushButton, 
                              QTreeWidget, QTreeWidgetItem, QSplitter, QFileDialog,
-                             QMessageBox, QGroupBox, QFormLayout, QFrame, QProgressBar)
+                             QMessageBox, QGroupBox, QFormLayout, QFrame, QProgressBar,
+                             QMenu) # Added QMenu
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSettings
 from PyQt6.QtGui import QIcon, QFont, QPalette, QColor
 
@@ -110,7 +111,7 @@ class SnmpWorker(QThread):
     Runs the SNMP blocking calls in a separate thread.
     """
     log_signal = pyqtSignal(str)          
-    result_signal = pyqtSignal(str, str)  
+    result_signal = pyqtSignal(str, str, str)  # OID, RawValue, PrettyValue
     finished_signal = pyqtSignal()
     error_signal = pyqtSignal(str)
 
@@ -226,8 +227,13 @@ class SnmpWorker(QThread):
                 else:
                     for varBind in varBinds:
                         oid_str = varBind[0].prettyPrint()
-                        val_str = self._format_value(varBind[1])
-                        self.result_signal.emit(oid_str, val_str)
+                        
+                        # Get RAW value (standard string rep)
+                        raw_val_str = varBind[1].prettyPrint()
+                        # Get PRETTY value (custom material format)
+                        pretty_val_str = self._format_value(varBind[1])
+                        
+                        self.result_signal.emit(oid_str, raw_val_str, pretty_val_str)
 
         except Exception as e:
             self.error_signal.emit(f"Critical Error: {str(e)}")
@@ -363,6 +369,11 @@ class MainWindow(QMainWindow):
         self.tree.setHeaderLabels(["OID / Parameter", "Value"])
         self.tree.setColumnWidth(0, 450)
         self.tree.setAlternatingRowColors(True)
+        
+        # Enable Context Menu
+        self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self.open_menu)
+        
         right_layout.addWidget(self.tree)
 
         self.status_bar = QLabel(" Ready to connect")
@@ -541,7 +552,7 @@ class MainWindow(QMainWindow):
     def update_status(self, message):
         self.status_bar.setText(f" {message}")
 
-    def add_tree_item(self, oid, value):
+    def add_tree_item(self, oid, raw_value, pretty_value):
         # 1. Determine Group (Module Name) vs Child (Object Name)
         if '::' in oid:
             # Format: Module-Name::Object-Name.Index
@@ -571,7 +582,43 @@ class MainWindow(QMainWindow):
         parent_item = self.oid_groups[parent_key]
         child_item = QTreeWidgetItem(parent_item)
         child_item.setText(0, display_text)
-        child_item.setText(1, value)
+        child_item.setText(1, pretty_value)
+        # Store raw value for context menu (hidden UserRole)
+        child_item.setData(1, Qt.ItemDataRole.UserRole, raw_value)
+        # Optional: Add tooltip
+        child_item.setToolTip(1, f"Raw: {raw_value}")
+
+    def open_menu(self, position):
+        item = self.tree.itemAt(position)
+        if not item:
+            return
+            
+        # Create Context Menu
+        menu = QMenu()
+        
+        # Add Actions
+        action_copy_pretty = menu.addAction("Copy Value")
+        action_copy_raw = menu.addAction("Copy Raw Value")
+        
+        # Execute Menu
+        action = menu.exec(self.tree.viewport().mapToGlobal(position))
+        
+        clipboard = QApplication.clipboard()
+        
+        if action == action_copy_pretty:
+            # Copy displayed text
+            clipboard.setText(item.text(1))
+            self.update_status(f"Copied: {item.text(1)}")
+            
+        elif action == action_copy_raw:
+            # Copy hidden raw text
+            raw_text = item.data(1, Qt.ItemDataRole.UserRole)
+            if raw_text:
+                clipboard.setText(raw_text)
+                self.update_status(f"Copied Raw: {raw_text}")
+            else:
+                # Fallback if no raw data (e.g. group headers)
+                clipboard.setText(item.text(1))
 
     def handle_error(self, msg):
         QMessageBox.critical(self, "SNMP Error", msg)
