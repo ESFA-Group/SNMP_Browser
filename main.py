@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLabel, QLineEdit, QPushButton, 
                              QTreeWidget, QTreeWidgetItem, QSplitter, QFileDialog,
-                             QMessageBox, QGroupBox, QFormLayout, QFrame)
+                             QMessageBox, QGroupBox, QFormLayout, QFrame, QProgressBar)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSettings
 from PyQt6.QtGui import QIcon, QFont, QPalette, QColor
 
@@ -34,7 +34,76 @@ class DeviceConfig:
     auth_key: str
     priv_key: str
 
-# --- Worker Thread for SNMP Operations ---
+# --- MIB Compiler Worker (Prevents UI Freezing) ---
+
+class MibCompilerWorker(QThread):
+    """
+    Handles MIB compilation in the background.
+    Includes online sources to resolve dependencies.
+    """
+    progress_signal = pyqtSignal(str)
+    finished_signal = pyqtSignal(str) # Report text
+
+    def __init__(self, mib_path):
+        super().__init__()
+        self.mib_path = mib_path
+
+    def run(self):
+        self.progress_signal.emit("Initializing Compiler...")
+        
+        engine = SnmpEngine()
+        builder = engine.getMibBuilder()
+        
+        try:
+            # Add both local and ONLINE sources for the explicit compile step
+            compiler.addMibCompiler(
+                builder,
+                sources=[
+                    f'file://{self.mib_path}',
+                    'http://mibs.thola.io/asn1/@mib@' 
+                ]
+            )
+        except Exception as e:
+            self.finished_signal.emit(f"Critical Error setting up compiler: {e}")
+            return
+
+        results = []
+        errors = 0
+        processed_count = 0
+        
+        if not os.path.exists(self.mib_path):
+            self.finished_signal.emit("Error: MIB folder path does not exist.")
+            return
+
+        all_files = os.listdir(self.mib_path)
+        valid_exts = ('.mib', '.my', '.txt', '.smi')
+        
+        for filename in all_files:
+             full_path = os.path.join(self.mib_path, filename)
+             
+             if os.path.isdir(full_path):
+                 continue
+
+             if filename.lower().endswith(valid_exts):
+                mod_name = os.path.splitext(filename)[0]
+                self.progress_signal.emit(f"Compiling: {mod_name}...")
+                try:
+                    builder.loadModules(mod_name)
+                    results.append(f"✔ {mod_name}: Compiled & Loaded")
+                    processed_count += 1
+                except Exception as e:
+                    errors += 1
+                    results.append(f"✘ {mod_name}: {str(e)}")
+        
+        # Summary Report
+        if processed_count == 0:
+            report = f"No valid MIB files found in folder.\nChecked for: {valid_exts}"
+        else:
+            report = f"Processed {processed_count} files.\n{errors} Errors.\n\n" + "\n".join(results)
+            
+        self.finished_signal.emit(report)
+
+# --- SNMP Walker Worker ---
 
 class SnmpWorker(QThread):
     """
@@ -52,10 +121,6 @@ class SnmpWorker(QThread):
         self.is_running = True
 
     def _format_value(self, obj):
-        """
-        Intelligent type handler to format SNMP values (Time, MAC, IP) 
-        into a human-readable 'Material' style.
-        """
         class_name = obj.__class__.__name__
 
         if class_name == 'TimeTicks':
@@ -100,40 +165,35 @@ class SnmpWorker(QThread):
         if self.mib_path and os.path.isdir(self.mib_path):
             builder = snmp_engine.getMibBuilder()
             try:
-                # 1. ATTACH THE COMPILER
-                # Added 'http' source to fetch standard MIBs (like SNMPv2-SMI) if missing locally
+                # 1. ATTACH THE COMPILER (LOCAL ONLY)
+                # Removed 'http' source to prevent hanging during connection.
+                # Use "Compile MIBs" button for dependencies.
                 compiler.addMibCompiler(
                     builder, 
-                    sources=[
-                        f'file://{self.mib_path}',
-                        'http://mibs.thola.io/asn1/@mib@' 
-                    ]
+                    sources=[f'file://{self.mib_path}']
                 )
-                self.log_signal.emit(f"MIB Compiler attached to: {self.mib_path}")
+                self.log_signal.emit(f"MIB Source: {self.mib_path}")
                 
-                # 2. EXPLICITLY LOAD MODULES
+                # 2. LOAD MODULES (Fast, Local Only)
                 loaded_count = 0
-                errors = []
+                valid_exts = ('.mib', '.my', '.txt', '.smi')
+
                 for filename in os.listdir(self.mib_path):
-                    if filename.endswith(('.mib', '.my', '.txt')):
+                    if filename.lower().endswith(valid_exts):
                         mod_name = os.path.splitext(filename)[0]
                         try:
+                            # If compiled previously, this is fast. 
+                            # If missing dependencies, it might fail silently here,
+                            # but won't hang the network.
                             builder.loadModules(mod_name)
                             loaded_count += 1
-                        except Exception as e:
-                            # Capture error to show user
-                            err_msg = str(e)
-                            errors.append(f"{mod_name}: {err_msg}")
-                            print(f"Warning: Could not load MIB {mod_name}: {e}")
+                        except:
+                            pass # Ignore errors during walk, focus on connection
                 
-                if loaded_count == 0 and errors:
-                     # Show the first error to help debug
-                    self.log_signal.emit(f"MIB Error: {errors[0]}")
-                else:
-                    self.log_signal.emit(f"Compiled & Loaded {loaded_count} MIB modules.")
+                self.log_signal.emit(f"Loaded {loaded_count} MIB modules.")
 
             except Exception as e:
-                self.log_signal.emit(f"MIB Setup Error: {str(e)}\nHint: Check MIB syntax.")
+                self.log_signal.emit(f"MIB Setup Warning: {str(e)}")
 
         user_data = UsmUserData(
             self.device.username,
@@ -187,10 +247,11 @@ class MainWindow(QMainWindow):
         
         self.settings = QSettings("MyCompany", "SnmpBrowser")
         self.mib_folder_path = ""
-        self.current_theme = self.settings.value("theme", "dark") # Default to dark
+        self.current_theme = self.settings.value("theme", "dark") 
+        self.oid_groups = {} # Dictionary to store tree group items
 
         self.init_ui()
-        self.apply_theme() # Apply initial theme
+        self.apply_theme()
         self.load_settings()
 
     def init_ui(self):
@@ -322,7 +383,6 @@ class MainWindow(QMainWindow):
         self.apply_theme()
 
     def apply_theme(self):
-        # Common Styles
         base_css = """
             * { font-family: 'Segoe UI', 'Roboto', sans-serif; font-size: 14px; }
             QGroupBox { font-weight: bold; border: 1px solid palette(mid); border-radius: 6px; margin-top: 24px; padding-top: 10px; }
@@ -331,35 +391,28 @@ class MainWindow(QMainWindow):
             QLineEdit:focus { border: 2px solid #4CAF50; }
             QSplitter::handle { background-color: palette(mid); }
             QStatusBar { padding: 5px; }
-            
-            /* Button Styles */
             QPushButton { border-radius: 4px; padding: 8px 16px; font-weight: bold; border: none; }
             QPushButton#primaryButton { background-color: #4CAF50; color: white; }
             QPushButton#primaryButton:hover { background-color: #45a049; }
             QPushButton#primaryButton:pressed { background-color: #3d8b40; }
-            
             QPushButton#dangerButton { background-color: #F44336; color: white; }
             QPushButton#dangerButton:disabled { background-color: palette(mid); color: palette(disabled); }
-            
             QPushButton#secondaryButton { border: 1px solid palette(mid); background-color: palette(button); }
             QPushButton#secondaryButton:hover { background-color: palette(midlight); }
-            
             QLabel#headerLabel { font-size: 20px; font-weight: bold; margin-bottom: 10px; }
             QLabel#statusBar { padding-left: 10px; font-size: 12px; }
         """
 
         if self.current_theme == "dark":
-            # Dark Material Palette
             palette = QPalette()
             palette.setColor(QPalette.ColorRole.Window, QColor("#121212"))
             palette.setColor(QPalette.ColorRole.WindowText, QColor("#FFFFFF"))
-            palette.setColor(QPalette.ColorRole.Base, QColor("#1E1E1E")) # Inputs/Tree
-            palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#252525")) # Tree Alternate
+            palette.setColor(QPalette.ColorRole.Base, QColor("#1E1E1E"))
+            palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#252525"))
             palette.setColor(QPalette.ColorRole.Text, QColor("#E0E0E0"))
             palette.setColor(QPalette.ColorRole.Button, QColor("#2C2C2C"))
             palette.setColor(QPalette.ColorRole.ButtonText, QColor("#FFFFFF"))
-            palette.setColor(QPalette.ColorRole.Mid, QColor("#444444")) # Borders
-            
+            palette.setColor(QPalette.ColorRole.Mid, QColor("#444444"))
             QApplication.setPalette(palette)
             
             dark_css = """
@@ -374,7 +427,6 @@ class MainWindow(QMainWindow):
             self.btn_theme.setText("Switch to Light Mode ☀")
 
         else:
-            # Light Material Palette
             palette = QPalette()
             palette.setColor(QPalette.ColorRole.Window, QColor("#F5F5F5"))
             palette.setColor(QPalette.ColorRole.WindowText, QColor("#000000"))
@@ -384,7 +436,6 @@ class MainWindow(QMainWindow):
             palette.setColor(QPalette.ColorRole.Button, QColor("#E0E0E0"))
             palette.setColor(QPalette.ColorRole.ButtonText, QColor("#000000"))
             palette.setColor(QPalette.ColorRole.Mid, QColor("#BDBDBD"))
-            
             QApplication.setPalette(palette)
             
             light_css = """
@@ -409,7 +460,7 @@ class MainWindow(QMainWindow):
         if saved_path and os.path.exists(saved_path):
             self.mib_folder_path = saved_path
             self.lbl_mib_status.setText(f"Loaded: {os.path.basename(saved_path)}")
-            self.lbl_mib_status.setStyleSheet("color: #4CAF50;") # Green text for success
+            self.lbl_mib_status.setStyleSheet("color: #4CAF50;") 
         
     def closeEvent(self, event):
         self.settings.setValue("ip", self.input_ip.text())
@@ -422,7 +473,7 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def select_mib_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Folder containing .mib files", directory=self.mib_folder_path)
+        folder = QFileDialog.getExistingDirectory(self, "Select Folder containing .mib files")
         if folder:
             self.mib_folder_path = folder
             self.lbl_mib_status.setText(f"Loaded: {os.path.basename(folder)}")
@@ -433,49 +484,26 @@ class MainWindow(QMainWindow):
         if not self.mib_folder_path or not os.path.exists(self.mib_folder_path):
              QMessageBox.warning(self, "Error", "Please select a MIB folder first.")
              return
-             
-        self.status_bar.setText(" Compiling MIBs... please wait.")
-        QApplication.processEvents() # Force UI update
         
-        engine = SnmpEngine()
-        builder = engine.getMibBuilder()
+        self.btn_compile_mib.setEnabled(False)
+        self.btn_load_mib.setEnabled(False)
+        self.status_bar.setText(" Compiling MIBs... check progress.")
         
-        # Attach compiler
-        try:
-            compiler.addMibCompiler(
-                builder,
-                sources=[
-                    f'file://{self.mib_folder_path}',
-                    'http://mibs.thola.io/asn1/@mib@'
-                ]
-            )
-        except Exception as e:
-            QMessageBox.critical(self, "Compiler Error", f"Failed to setup compiler: {e}")
-            return
+        # Start Worker
+        self.compiler_thread = MibCompilerWorker(self.mib_folder_path)
+        self.compiler_thread.progress_signal.connect(self.update_status)
+        self.compiler_thread.finished_signal.connect(self.compile_finished)
+        self.compiler_thread.start()
 
-        results = []
-        errors = 0
-        
-        for filename in os.listdir(self.mib_folder_path):
-             if filename.endswith(('.mib', '.my', '.txt')):
-                mod_name = os.path.splitext(filename)[0]
-                try:
-                    builder.loadModules(mod_name)
-                    results.append(f"✔ {mod_name}: Compiled & Loaded")
-                except Exception as e:
-                    errors += 1
-                    results.append(f"✘ {mod_name}: {str(e)}")
-        
+    def compile_finished(self, report):
+        self.btn_compile_mib.setEnabled(True)
+        self.btn_load_mib.setEnabled(True)
         self.status_bar.setText(" Compilation finished.")
         
-        # Show Report
         msg = QMessageBox(self)
         msg.setWindowTitle("MIB Compilation Report")
-        msg.setText(f"Processed {len(results)} files.\n{errors} Errors.")
-        
-        # Scrollable detail area (QMessageBox supports detailed text)
-        msg.setDetailedText("\n".join(results))
-        msg.setIcon(QMessageBox.Icon.Information if errors == 0 else QMessageBox.Icon.Warning)
+        msg.setText("Compilation process completed.")
+        msg.setDetailedText(report)
         msg.exec()
 
     def start_snmp_walk(self):
@@ -492,6 +520,7 @@ class MainWindow(QMainWindow):
         )
 
         self.tree.clear()
+        self.oid_groups = {} # Reset groupings
         self.btn_connect.setEnabled(False)
         self.btn_stop.setEnabled(True)
         self.status_bar.setText(" Scanning network device...")
@@ -513,9 +542,36 @@ class MainWindow(QMainWindow):
         self.status_bar.setText(f" {message}")
 
     def add_tree_item(self, oid, value):
-        item = QTreeWidgetItem(self.tree)
-        item.setText(0, oid)
-        item.setText(1, value)
+        # 1. Determine Group (Module Name) vs Child (Object Name)
+        if '::' in oid:
+            # Format: Module-Name::Object-Name.Index
+            module_name, rest = oid.split('::', 1)
+            parent_key = module_name
+            display_text = rest
+        else:
+            # Format: 1.3.6... (Raw OID)
+            parent_key = "Raw / Unknown"
+            display_text = oid
+
+        # 2. Find or Create Parent Group Item
+        if parent_key not in self.oid_groups:
+            group_item = QTreeWidgetItem(self.tree)
+            group_item.setText(0, parent_key)
+            group_item.setText(1, "") # Group headers have no value
+            
+            # Style the group header
+            font = group_item.font(0)
+            font.setBold(True)
+            group_item.setFont(0, font)
+            group_item.setExpanded(True) # Auto-expand groups
+            
+            self.oid_groups[parent_key] = group_item
+        
+        # 3. Add Child Item to the Group
+        parent_item = self.oid_groups[parent_key]
+        child_item = QTreeWidgetItem(parent_item)
+        child_item.setText(0, display_text)
+        child_item.setText(1, value)
 
     def handle_error(self, msg):
         QMessageBox.critical(self, "SNMP Error", msg)
