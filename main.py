@@ -258,12 +258,21 @@ class MainWindow(QMainWindow):
         self.lbl_mib_status.setObjectName("statusLabel")
         self.lbl_mib_status.setWordWrap(True)
         
+        # New Layout for MIB buttons
+        mib_btn_layout = QHBoxLayout()
         self.btn_load_mib = QPushButton("Select Folder")
         self.btn_load_mib.setObjectName("secondaryButton")
         self.btn_load_mib.clicked.connect(self.select_mib_folder)
         
+        self.btn_compile_mib = QPushButton("Compile MIBs")
+        self.btn_compile_mib.setObjectName("secondaryButton")
+        self.btn_compile_mib.clicked.connect(self.compile_mibs)
+        
+        mib_btn_layout.addWidget(self.btn_load_mib)
+        mib_btn_layout.addWidget(self.btn_compile_mib)
+        
         mib_layout.addWidget(self.lbl_mib_status)
-        mib_layout.addWidget(self.btn_load_mib)
+        mib_layout.addLayout(mib_btn_layout)
         mib_group.setLayout(mib_layout)
         left_layout.addWidget(mib_group)
 
@@ -413,12 +422,61 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def select_mib_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Folder containing .mib files")
+        folder = QFileDialog.getExistingDirectory(self, "Select Folder containing .mib files", directory=self.mib_folder_path)
         if folder:
             self.mib_folder_path = folder
             self.lbl_mib_status.setText(f"Loaded: {os.path.basename(folder)}")
             self.lbl_mib_status.setStyleSheet("color: #4CAF50;")
             self.status_bar.setText(f"MIB path set to: {folder}")
+
+    def compile_mibs(self):
+        if not self.mib_folder_path or not os.path.exists(self.mib_folder_path):
+             QMessageBox.warning(self, "Error", "Please select a MIB folder first.")
+             return
+             
+        self.status_bar.setText(" Compiling MIBs... please wait.")
+        QApplication.processEvents() # Force UI update
+        
+        engine = SnmpEngine()
+        builder = engine.getMibBuilder()
+        
+        # Attach compiler
+        try:
+            compiler.addMibCompiler(
+                builder,
+                sources=[
+                    f'file://{self.mib_folder_path}',
+                    'http://mibs.thola.io/asn1/@mib@'
+                ]
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Compiler Error", f"Failed to setup compiler: {e}")
+            return
+
+        results = []
+        errors = 0
+        
+        for filename in os.listdir(self.mib_folder_path):
+             if filename.endswith(('.mib', '.my', '.txt')):
+                mod_name = os.path.splitext(filename)[0]
+                try:
+                    builder.loadModules(mod_name)
+                    results.append(f"✔ {mod_name}: Compiled & Loaded")
+                except Exception as e:
+                    errors += 1
+                    results.append(f"✘ {mod_name}: {str(e)}")
+        
+        self.status_bar.setText(" Compilation finished.")
+        
+        # Show Report
+        msg = QMessageBox(self)
+        msg.setWindowTitle("MIB Compilation Report")
+        msg.setText(f"Processed {len(results)} files.\n{errors} Errors.")
+        
+        # Scrollable detail area (QMessageBox supports detailed text)
+        msg.setDetailedText("\n".join(results))
+        msg.setIcon(QMessageBox.Icon.Information if errors == 0 else QMessageBox.Icon.Warning)
+        msg.exec()
 
     def start_snmp_walk(self):
         if not self.input_ip.text():
