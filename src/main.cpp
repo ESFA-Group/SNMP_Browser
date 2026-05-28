@@ -41,20 +41,20 @@ int main(int argc, char *argv[])
     // Set Quick Controls style
     QQuickStyle::setStyle("Basic");
 
-    auto centerOnScreen = [](QWindow *window) {
+    auto activeScreenGeometry = []() -> QRect {
+        QScreen *screen = QGuiApplication::screenAt(QCursor::pos());
+        if (!screen) {
+            screen = QGuiApplication::primaryScreen();
+        }
+        return screen ? screen->availableGeometry() : QRect(0, 0, 1280, 720);
+    };
+
+    auto centerOnScreen = [activeScreenGeometry](QWindow *window) {
         if (!window) {
             return;
         }
 
-        QScreen *screen = window->screen();
-        if (!screen) {
-            screen = QGuiApplication::primaryScreen();
-        }
-        if (!screen) {
-            return;
-        }
-
-        const QRect screenGeometry = screen->availableGeometry();
+        const QRect screenGeometry = activeScreenGeometry();
         const QSize windowSize = window->size();
         const int x = screenGeometry.x() + (screenGeometry.width() - windowSize.width()) / 2;
         const int y = screenGeometry.y() + (screenGeometry.height() - windowSize.height()) / 2;
@@ -62,11 +62,16 @@ int main(int argc, char *argv[])
     };
 
     QQuickView splashView;
-    splashView.setFlags(Qt::SplashScreen | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    const QRect splashGeometry = activeScreenGeometry();
+
+    // On Linux/Wayland, compositors are allowed to ignore exact top-level window
+    // positions. Use a transparent screen-sized overlay and center the visible
+    // splash card inside QML, so the card appears centered even when setPosition()
+    // is ignored by the window manager.
+    splashView.setFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
     splashView.setColor(Qt::transparent);
     splashView.setResizeMode(QQuickView::SizeRootObjectToView);
-    splashView.resize(560, 340);
-    centerOnScreen(&splashView);
+    splashView.setGeometry(splashGeometry);
     splashView.setSource(QUrl(QStringLiteral("qrc:/qml/SplashScreen.qml")));
     splashView.show();
     splashView.raise();
