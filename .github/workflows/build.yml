@@ -285,3 +285,128 @@ jobs:
 
           # Net-SNMP's MSVC build generates a few headers outside the installed
           # include root. Copy every header below a net-snmp path while preserving
+          # the path from the net-snmp directory onward.
+          Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Include "*.h" -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match "\\net-snmp\\" } |
+            ForEach-Object {
+              $sourcePath = $_.FullName
+              $matchIndex = $sourcePath.ToLowerInvariant().LastIndexOf("\net-snmp\")
+              if ($matchIndex -lt 0) { return }
+              $relativePath = $sourcePath.Substring($matchIndex + 1)
+              $targetPath = Join-Path $includeDir $relativePath
+              if ($sourcePath -ieq $targetPath) { return }
+              New-Item -ItemType Directory -Force (Split-Path $targetPath -Parent) | Out-Null
+              Copy-Item $sourcePath $targetPath -Force
+            }
+
+          if (-not (Test-Path $headerTarget)) {
+            Write-Host "Could not find net-snmp/net-snmp-includes.h after normalization. Current include files:"
+            Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Include "*.h" -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match "net-snmp|snmp" } |
+              Select-Object -ExpandProperty FullName
+            exit 1
+          }
+
+          if (-not (Test-Path $securityHeaderTarget)) {
+            Write-Host "Could not find net-snmp/library/snmpv3-security-includes.h after normalization. Current matching files:"
+            Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Include "*security*includes*.h","snmpv3*.h" -ErrorAction SilentlyContinue |
+              Select-Object -ExpandProperty FullName
+            exit 1
+          }
+
+          $lib = Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Filter netsnmp.lib -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -ine $libTarget } |
+            Where-Object { $_.FullName -match '\\release\\|\\lib\\' } |
+            Select-Object -First 1
+
+          if ($lib) {
+            Copy-Item $lib.FullName $libTarget -Force
+          } elseif (-not (Test-Path $libTarget)) {
+            Write-Host "Could not find netsnmp.lib. Current Net-SNMP files:"
+            Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Include "*snmp*.lib","*snmp*.dll" -ErrorAction SilentlyContinue |
+              Select-Object -ExpandProperty FullName
+            exit 1
+          } else {
+            Write-Host "netsnmp.lib already normalized at $libTarget"
+          }
+
+          Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Filter netsnmp.dll -ErrorAction SilentlyContinue |
+            ForEach-Object {
+              $dllTarget = Join-Path $dllTargetDir $_.Name
+              if ($_.FullName -ieq $dllTarget) {
+                Write-Host "Skipping already-normalized DLL $dllTarget"
+              } else {
+                Copy-Item $_.FullName -Destination $dllTargetDir -Force
+              }
+            }
+
+          Get-ChildItem -Path "${{ env.NETSNMP_PREFIX }}" -Recurse |
+            Select-Object -ExpandProperty FullName
+
+      - name: Configure (CMake)
+        shell: cmd
+        run: |
+          cmake -B build -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DNET_SNMP_ROOT="${{ env.NETSNMP_PREFIX }}" ^
+            -DCMAKE_PREFIX_PATH="${{ env.NETSNMP_PREFIX }}"
+
+      - name: Build
+        shell: cmd
+        run: cmake --build build --config Release
+
+      - name: Deploy to dist/
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item build\SNMPBrowser.exe dist\
+
+          # Qt runtime + QML modules
+          windeployqt --release `
+            --qmldir resources/qml `
+            --no-translations `
+            dist\SNMPBrowser.exe
+
+          # net-snmp DLL + OpenSSL DLLs
+          Copy-Item "${{ env.NETSNMP_PREFIX }}\bin\*.dll" dist\
+          Copy-Item "${{ env.OPENSSL_DIR }}\bin\libssl-*.dll" dist\ -ErrorAction SilentlyContinue
+          Copy-Item "${{ env.OPENSSL_DIR }}\bin\libcrypto-*.dll" dist\ -ErrorAction SilentlyContinue
+
+          Get-ChildItem dist\
+
+      - name: Build installer (InnoSetup)
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            /DMyAppVersion=${{ env.APP_VERSION }} `
+            "/DMyAppSourceDir=..\dist" `
+            installer\windows.iss
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-windows-x86_64
+          path: installer\output\*.exe
+
+  # ──────────────────────────────────────────────────────────────
+  # GitHub Release  (runs only on version tags, e.g. v1.0.0)
+  # ──────────────────────────────────────────────────────────────
+  release:
+    name: Create Release
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
