@@ -198,6 +198,19 @@ jobs:
             dir "${{ env.OPENSSL_DIR }}" /s /b | findstr /i "ossl_typ.h"
             exit /b 1
           )
+          if not exist "${{ env.OPENSSL_DIR }}\lib\libcrypto.lib" (
+            echo libcrypto.lib not found under ${{ env.OPENSSL_DIR }}\lib
+            dir "${{ env.OPENSSL_DIR }}\lib" /b
+            exit /b 1
+          )
+          if not exist "${{ env.OPENSSL_DIR }}\lib\libssl.lib" (
+            echo libssl.lib not found under ${{ env.OPENSSL_DIR }}\lib
+            dir "${{ env.OPENSSL_DIR }}\lib" /b
+            exit /b 1
+          )
+          copy /Y "${{ env.OPENSSL_DIR }}\lib\libcrypto.lib" "${{ env.OPENSSL_DIR }}\lib\libcrypto64MD.lib"
+          copy /Y "${{ env.OPENSSL_DIR }}\lib\libssl.lib" "${{ env.OPENSSL_DIR }}\lib\libssl64MD.lib"
+          dir "${{ env.OPENSSL_DIR }}\lib" /b | findstr /i "libcrypto libssl"
           echo INCLUDE=${{ env.OPENSSL_DIR }}\include;%INCLUDE%>>%GITHUB_ENV%
           echo LIB=${{ env.OPENSSL_DIR }}\lib;%LIB%>>%GITHUB_ENV%
           echo PATH=${{ env.OPENSSL_DIR }}\bin;%PATH%>>%GITHUB_ENV%
@@ -207,7 +220,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.NETSNMP_PREFIX }}
-          key: netsnmp-${{ env.NETSNMP_VERSION }}-msvc-x64-v2
+          key: netsnmp-${{ env.NETSNMP_VERSION }}-msvc-x64-v3
 
       - name: Download net-snmp source
         if: steps.cache-netsnmp.outputs.cache-hit != 'true'
