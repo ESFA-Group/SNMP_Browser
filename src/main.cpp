@@ -47,6 +47,8 @@ int main(int argc, char *argv[])
     splashView.resize(560, 340);
     splashView.setSource(QUrl(QStringLiteral("qrc:/qml/SplashScreen.qml")));
     splashView.show();
+    splashView.raise();
+    splashView.requestActivate();
     
     // Register QML types
     qmlRegisterType<TreeModel>("SNMPBrowser", 1, 0, "TreeModel");
@@ -61,22 +63,50 @@ int main(int argc, char *argv[])
     // Expose controller to QML
     engine.rootContext()->setContextProperty("controller", &controller);
     
-    // Load main QML file
+    // Load main QML file only after the splash screen completes. This avoids
+    // creating or showing the main window behind the splash during startup.
     const QUrl url(QStringLiteral("qrc:/qml/Main.qml"));
+    bool mainWindowLoaded = false;
+
+    auto loadMainWindow = [&]() {
+        if (mainWindowLoaded) {
+            return;
+        }
+
+        mainWindowLoaded = true;
+        splashView.close();
+        engine.load(url);
+    };
     
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated,
-                     &app, [&splashView, url](QObject *obj, const QUrl &objUrl) {
+                     &app, [url](QObject *obj, const QUrl &objUrl) {
         if (!obj && url == objUrl) {
             QCoreApplication::exit(-1);
             return;
         }
 
         if (obj && url == objUrl) {
-            QTimer::singleShot(1500, &splashView, &QQuickView::close);
+            if (auto *window = qobject_cast<QWindow *>(obj)) {
+                window->setFlag(Qt::WindowStaysOnTopHint, true);
+                window->show();
+                window->raise();
+                window->requestActivate();
+
+                QTimer::singleShot(150, window, [window]() {
+                    window->raise();
+                    window->requestActivate();
+                });
+            }
         }
     }, Qt::QueuedConnection);
-    
-    engine.load(url);
+
+    if (QObject *splashRoot = splashView.rootObject()) {
+        QObject::connect(splashRoot, SIGNAL(finished()), &app, loadMainWindow);
+    } else {
+        // If the splash QML fails to expose its finished signal, still avoid a
+        // stuck startup by loading the main window after the normal splash time.
+        QTimer::singleShot(1800, &app, loadMainWindow);
+    }
     
     return app.exec();
 }
