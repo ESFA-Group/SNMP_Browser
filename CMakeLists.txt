@@ -18,11 +18,17 @@ find_package(Qt6 REQUIRED COMPONENTS
     Concurrent
 )
 
+set(NET_SNMP_SEARCH_HINTS)
+if(DEFINED NET_SNMP_ROOT AND NOT "${NET_SNMP_ROOT}" STREQUAL "")
+    list(APPEND NET_SNMP_SEARCH_HINTS "${NET_SNMP_ROOT}")
+endif()
+
 # Find net-snmp library. Net-SNMP's legacy MSVC win32 build installs import
 # libraries under lib/release or lib/debug, while Unix packages usually install
 # directly under lib. Search both layouts so CMAKE_PREFIX_PATH is enough for CI.
 find_library(NET_SNMP_LIB
     NAMES netsnmp
+    HINTS ${NET_SNMP_SEARCH_HINTS}
     PATH_SUFFIXES
         lib
         lib/release
@@ -33,10 +39,12 @@ find_library(NET_SNMP_LIB
 
 find_path(NET_SNMP_INCLUDE
     NAMES net-snmp/net-snmp-config.h
+    HINTS ${NET_SNMP_SEARCH_HINTS}
     PATH_SUFFIXES include
     REQUIRED
 )
 
+message(STATUS "NET_SNMP_ROOT=${NET_SNMP_ROOT}")
 message(STATUS "NET_SNMP_LIB=${NET_SNMP_LIB}")
 message(STATUS "NET_SNMP_INCLUDE=${NET_SNMP_INCLUDE}")
 
