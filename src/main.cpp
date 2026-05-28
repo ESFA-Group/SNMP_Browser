@@ -5,6 +5,7 @@
 #include <QQuickView>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
+#include <QScreen>
 #include <QTimer>
 #include <QIcon>
 
@@ -40,11 +41,32 @@ int main(int argc, char *argv[])
     // Set Quick Controls style
     QQuickStyle::setStyle("Basic");
 
+    auto centerOnScreen = [](QWindow *window) {
+        if (!window) {
+            return;
+        }
+
+        QScreen *screen = window->screen();
+        if (!screen) {
+            screen = QGuiApplication::primaryScreen();
+        }
+        if (!screen) {
+            return;
+        }
+
+        const QRect screenGeometry = screen->availableGeometry();
+        const QSize windowSize = window->size();
+        const int x = screenGeometry.x() + (screenGeometry.width() - windowSize.width()) / 2;
+        const int y = screenGeometry.y() + (screenGeometry.height() - windowSize.height()) / 2;
+        window->setPosition(qMax(screenGeometry.x(), x), qMax(screenGeometry.y(), y));
+    };
+
     QQuickView splashView;
     splashView.setFlags(Qt::SplashScreen | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
     splashView.setColor(Qt::transparent);
     splashView.setResizeMode(QQuickView::SizeRootObjectToView);
     splashView.resize(560, 340);
+    centerOnScreen(&splashView);
     splashView.setSource(QUrl(QStringLiteral("qrc:/qml/SplashScreen.qml")));
     splashView.show();
     splashView.raise();
@@ -79,7 +101,7 @@ int main(int argc, char *argv[])
     };
     
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated,
-                     &app, [url](QObject *obj, const QUrl &objUrl) {
+                     &app, [url, centerOnScreen](QObject *obj, const QUrl &objUrl) {
         if (!obj && url == objUrl) {
             QCoreApplication::exit(-1);
             return;
@@ -88,11 +110,13 @@ int main(int argc, char *argv[])
         if (obj && url == objUrl) {
             if (auto *window = qobject_cast<QWindow *>(obj)) {
                 window->setFlag(Qt::WindowStaysOnTopHint, true);
+                centerOnScreen(window);
                 window->show();
                 window->raise();
                 window->requestActivate();
 
-                QTimer::singleShot(150, window, [window]() {
+                QTimer::singleShot(150, window, [window, centerOnScreen]() {
+                    centerOnScreen(window);
                     window->raise();
                     window->requestActivate();
                 });
