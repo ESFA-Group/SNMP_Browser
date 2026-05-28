@@ -3,7 +3,6 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
 import QtQuick.Window
-import Qt.labs.platform as Platform
 
 ApplicationWindow {
     id: window
@@ -214,7 +213,7 @@ ApplicationWindow {
                                 onTextChanged: controller.settings.ip = text
                                 color: textColor
                                 placeholderTextColor: secondaryTextColor
-                                background: inputBackground
+                                background: InputBackground {}
                             }
 
                             Label { text: "Port:"; color: textColor }
@@ -227,7 +226,7 @@ ApplicationWindow {
                                     if (!isNaN(val)) controller.settings.port = val
                                 }
                                 color: textColor
-                                background: inputBackground
+                                background: InputBackground {}
                             }
 
                             Label { text: "User:"; color: textColor }
@@ -236,7 +235,7 @@ ApplicationWindow {
                                 text: controller.settings.username
                                 onTextChanged: controller.settings.username = text
                                 color: textColor
-                                background: inputBackground
+                                background: InputBackground {}
                             }
 
                             Label { text: "Auth Key:"; color: textColor }
@@ -248,7 +247,7 @@ ApplicationWindow {
                                 echoMode: TextInput.Password
                                 color: textColor
                                 placeholderTextColor: secondaryTextColor
-                                background: inputBackground
+                                background: InputBackground {}
                             }
 
                             Label { text: "Priv Key:"; color: textColor }
@@ -260,7 +259,7 @@ ApplicationWindow {
                                 echoMode: TextInput.Password
                                 color: textColor
                                 placeholderTextColor: secondaryTextColor
-                                background: inputBackground
+                                background: InputBackground {}
                             }
                         }
                     }
@@ -306,8 +305,8 @@ ApplicationWindow {
                                     text: "Select Folder"
                                     enabled: !controller.isCompiling
                                     onClicked: mibFolderDialog.open()
-                                    background: secondaryButtonBackground
-                                    contentItem: buttonText
+                                    background: SecondaryButtonBackground {}
+                                    contentItem: ButtonText {}
                                 }
 
                                 Button {
@@ -315,8 +314,8 @@ ApplicationWindow {
                                     text: "Compile MIBs"
                                     enabled: !controller.isCompiling && controller.settings.mibPath
                                     onClicked: controller.compileMibs()
-                                    background: secondaryButtonBackground
-                                    contentItem: buttonText
+                                    background: SecondaryButtonBackground {}
+                                    contentItem: ButtonText {}
                                 }
                             }
                         }
@@ -372,8 +371,8 @@ ApplicationWindow {
                         text: "EXPORT SNAPSHOT"
                         enabled: controller.canExport
                         onClicked: exportFileDialog.open()
-                        background: secondaryButtonBackground
-                        contentItem: buttonText
+                        background: SecondaryButtonBackground {}
+                        contentItem: ButtonText {}
                     }
                 }
             }
