@@ -1,9 +1,0 @@
--rootPath
-/home/alireza/Programming/SNMP_Browser/cpp_qt
--cmake-output
--output-file
-/home/alireza/Programming/SNMP_Browser/cpp_qt/build/.qt_plugins/Qt6_QmlPlugins_Imports_SNMPBrowser.cmake
--importPath
-/home/alireza/Programming/SNMP_Browser/cpp_qt/build
--importPath
-/usr/lib/x86_64-linux-gnu/qt6/qml
