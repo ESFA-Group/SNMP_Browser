@@ -44,6 +44,7 @@ jobs:
             qml6-module-qtquick-controls \
             qml6-module-qtquick-layouts \
             qml6-module-qtquick-dialogs \
+            qml6-module-qtquick-templates \
             qml6-module-qt-labs-platform \
             libsnmp-dev \
             cmake \
@@ -121,6 +122,7 @@ jobs:
           test -d "$QT_QML_DIR/QtQuick/Controls"
           test -d "$QT_QML_DIR/QtQuick/Layouts"
           test -d "$QT_QML_DIR/QtQuick/Dialogs"
+          test -d "$QT_QML_DIR/QtQuick/Templates"
           test -d "$QT_QML_DIR/Qt/labs/platform"
 
           echo "QT_QML_DIR=$QT_QML_DIR" >> "$GITHUB_ENV"
