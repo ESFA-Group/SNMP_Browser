@@ -63,8 +63,8 @@ int main(int argc, char *argv[])
     // Expose controller to QML
     engine.rootContext()->setContextProperty("controller", &controller);
     
-    // Load main QML file only after the splash screen completes. This avoids
-    // creating or showing the main window behind the splash during startup.
+    // Load main QML file only after the splash duration. This avoids creating
+    // or showing the main window behind the splash during startup.
     const QUrl url(QStringLiteral("qrc:/qml/Main.qml"));
     bool mainWindowLoaded = false;
 
@@ -100,13 +100,7 @@ int main(int argc, char *argv[])
         }
     }, Qt::QueuedConnection);
 
-    if (QObject *splashRoot = splashView.rootObject()) {
-        QObject::connect(splashRoot, SIGNAL(finished()), &app, loadMainWindow);
-    } else {
-        // If the splash QML fails to expose its finished signal, still avoid a
-        // stuck startup by loading the main window after the normal splash time.
-        QTimer::singleShot(1800, &app, loadMainWindow);
-    }
+    QTimer::singleShot(1800, &app, loadMainWindow);
     
     return app.exec();
 }
