@@ -108,14 +108,21 @@ jobs:
           echo "QMAKE=$QMAKE" >> "$GITHUB_ENV"
           "$QMAKE" --version
 
-      - name: Verify Qt QML modules
+      - name: Prepare Qt QML module paths
         run: |
+          set -eux
           QT_QML_DIR="$($QMAKE -query QT_INSTALL_QML)"
+          echo "QT_QML_DIR=$QT_QML_DIR"
+          find "$QT_QML_DIR" -maxdepth 3 -type d | sort | sed -n '1,120p'
+
+          test -d "$QT_QML_DIR/QtQuick"
+          test -d "$QT_QML_DIR/QtQuick/Controls"
+          test -d "$QT_QML_DIR/QtQuick/Layouts"
+          test -d "$QT_QML_DIR/QtQuick/Dialogs"
+          test -d "$QT_QML_DIR/Qt/labs/platform"
+
           echo "QT_QML_DIR=$QT_QML_DIR" >> "$GITHUB_ENV"
-          test -f "$QT_QML_DIR/QtQuick/Controls/libqtquickcontrols2plugin.so"
-          test -f "$QT_QML_DIR/QtQuick/Layouts/libqquicklayoutsplugin.so"
-          test -f "$QT_QML_DIR/QtQuick/Dialogs/libdialogsquickplugin.so"
-          test -f "$QT_QML_DIR/Qt/labs/platform/libqtlabsplatformplugin.so"
+          echo "QML_MODULES_PATHS=$QT_QML_DIR" >> "$GITHUB_ENV"
 
       - name: Download linuxdeploy
         run: |
@@ -129,7 +136,6 @@ jobs:
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
           QML_SOURCES_PATHS: ${{ github.workspace }}/resources/qml
-          QML_MODULES_PATHS: ${{ env.QT_QML_DIR }}
           OUTPUT: ${{ env.APP_NAME }}-${{ env.APP_VERSION }}-linux-${{ matrix.arch }}.AppImage
         run: |
           ./linuxdeploy.AppImage \
