@@ -6,7 +6,6 @@ import QtQuick.Window
 
 ApplicationWindow {
     id: window
-    visible: true
     width: 1100
     height: 750
     minimumWidth: 900
@@ -36,7 +35,10 @@ ApplicationWindow {
             window.showMaximized()
     }
 
-    Component.onCompleted: controller.settings.load()
+    Component.onCompleted: {
+        controller.settings.load()
+        window.visible = true
+    }
     Component.onDestruction: controller.settings.save()
 
     header: AppTitleBar {
@@ -243,7 +245,7 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 text: controller.settings.authKey
                                 onTextChanged: controller.settings.authKey = text
-                                placeholderText: "MD5"
+                                placeholderText: "Auth passphrase, min 8 chars"
                                 echoMode: TextInput.Password
                                 color: textColor
                                 placeholderTextColor: secondaryTextColor
@@ -255,7 +257,7 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 text: controller.settings.privKey
                                 onTextChanged: controller.settings.privKey = text
-                                placeholderText: "DES"
+                                placeholderText: "Privacy passphrase, min 8 chars"
                                 echoMode: TextInput.Password
                                 color: textColor
                                 placeholderTextColor: secondaryTextColor
