@@ -8,8 +8,8 @@ Rectangle {
     property bool isDarkTheme: true
     property color accentColor: "#0097A7"
     signal finished()
-
-    color: isDarkTheme ? "#0B1114" : "#F4FAFB"
+    
+    color: "transparent"
     opacity: 1.0
 
     Behavior on opacity {
@@ -18,7 +18,7 @@ Rectangle {
 
     Timer {
         id: closeTimer
-        interval: 1500
+        interval: 3000
         repeat: false
         running: root.visible
         onTriggered: {
