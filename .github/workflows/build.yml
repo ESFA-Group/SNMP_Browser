@@ -79,6 +79,24 @@ jobs:
             -annotate 0 "SNMP" \
             AppDir/usr/share/icons/hicolor/256x256/apps/snmpbrowser.png
 
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+
+          # The AppImage currently bundles Qt's xcb platform plugin only.
+          # On Wayland desktops Qt may auto-select wayland, which fails when
+          # libqwayland-* is not bundled. Fall back to xcb unless the caller
+          # explicitly selected another non-Wayland platform.
+          case "${QT_QPA_PLATFORM:-}" in
+            ""|wayland|wayland-egl)
+              export QT_QPA_PLATFORM=xcb
+              ;;
+          esac
+
+          exec "$HERE/usr/bin/SNMPBrowser" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
       - name: Locate qmake6
         run: |
           QMAKE=$(command -v qmake6 2>/dev/null || command -v qmake 2>/dev/null)
