@@ -39,6 +39,7 @@ jobs:
           sudo apt-get install -y \
             qt6-base-dev \
             qt6-declarative-dev \
+            qml6-module-qtqml-workerscript \
             qml6-module-qtquick \
             qml6-module-qtquick-controls \
             qml6-module-qtquick-layouts \
@@ -115,6 +116,7 @@ jobs:
           echo "QT_QML_DIR=$QT_QML_DIR"
           find "$QT_QML_DIR" -maxdepth 3 -type d | sort | sed -n '1,120p'
 
+          test -d "$QT_QML_DIR/QtQml/WorkerScript"
           test -d "$QT_QML_DIR/QtQuick"
           test -d "$QT_QML_DIR/QtQuick/Controls"
           test -d "$QT_QML_DIR/QtQuick/Layouts"
