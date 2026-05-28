@@ -1,0 +1,10 @@
+/home/alireza/Programming/SNMP_Browser/cpp_qt/build/CMakeFiles/SNMPBrowser.dir
+/home/alireza/Programming/SNMP_Browser/cpp_qt/build/CMakeFiles/SNMPBrowser_qmlimportscan.dir
+/home/alireza/Programming/SNMP_Browser/cpp_qt/build/CMakeFiles/edit_cache.dir
+/home/alireza/Programming/SNMP_Browser/cpp_qt/build/CMakeFiles/rebuild_cache.dir
+/home/alireza/Programming/SNMP_Browser/cpp_qt/build/CMakeFiles/list_install_components.dir
+/home/alireza/Programming/SNMP_Browser/cpp_qt/build/CMakeFiles/install.dir
+/home/alireza/Programming/SNMP_Browser/cpp_qt/build/CMakeFiles/install/local.dir
+/home/alireza/Programming/SNMP_Browser/cpp_qt/build/CMakeFiles/install/strip.dir
+/home/alireza/Programming/SNMP_Browser/cpp_qt/build/CMakeFiles/SNMPBrowser_autogen_timestamp_deps.dir
+/home/alireza/Programming/SNMP_Browser/cpp_qt/build/CMakeFiles/SNMPBrowser_autogen.dir
