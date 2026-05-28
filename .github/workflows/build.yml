@@ -184,7 +184,10 @@ jobs:
             --disable-embedded-perl \
             --without-perl-modules \
             --without-python-modules
-          make -j$(nproc)
+          # LDFLAGS=-no-undefined: libtool flag (not a raw linker flag) required to
+          # build shared libs on MinGW. Passed at make-time to avoid breaking configure
+          # autoconf compile tests that don't go through libtool.
+          make -j$(nproc) LDFLAGS="-no-undefined"
           make install
 
       - name: Configure
