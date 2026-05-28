@@ -111,13 +111,15 @@ jobs:
           path: ${{ env.APP_NAME }}-*-linux-${{ matrix.arch }}.AppImage
 
   # ──────────────────────────────────────────────────────────────
-  # Windows x86_64  (MSYS2/MinGW64 — net-snmp has no vcpkg port)
+  # Windows x86_64  (MSYS2/MinGW64 — net-snmp built from source)
   # ──────────────────────────────────────────────────────────────
   build-windows:
     name: Windows x86_64
     runs-on: windows-latest
 
-    # All `run:` steps use the MSYS2 shell unless overridden with shell: pwsh
+    env:
+      NETSNMP_VERSION: "5.9.4"
+
     defaults:
       run:
         shell: msys2 {0}
@@ -125,7 +127,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup MSYS2 with Qt6 and net-snmp
+      - name: Setup MSYS2 with Qt6 + build tools
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
@@ -138,7 +140,48 @@ jobs:
             mingw-w64-x86_64-qt6-declarative
             mingw-w64-x86_64-qt6-shadertools
             mingw-w64-x86_64-qt6-tools
-            mingw-w64-x86_64-net-snmp
+            mingw-w64-x86_64-openssl
+            autoconf
+            automake
+            libtool
+            make
+            perl
+            tar
+            wget
+
+      - name: Cache net-snmp install
+        id: cache-netsnmp
+        uses: actions/cache@v4
+        with:
+          path: |
+            D:\a\_temp\msys64\mingw64\include\net-snmp
+            D:\a\_temp\msys64\mingw64\lib\libnetsnmp*
+            D:\a\_temp\msys64\mingw64\lib\pkgconfig\netsnmp*.pc
+            D:\a\_temp\msys64\mingw64\bin\libnetsnmp*.dll
+            D:\a\_temp\msys64\mingw64\bin\net-snmp-config
+          key: netsnmp-${{ env.NETSNMP_VERSION }}-mingw64-v1
+
+      - name: Build net-snmp from source
+        if: steps.cache-netsnmp.outputs.cache-hit != 'true'
+        run: |
+          wget -q "https://sourceforge.net/projects/net-snmp/files/net-snmp/${NETSNMP_VERSION}/net-snmp-${NETSNMP_VERSION}.tar.gz/download" \
+               -O net-snmp.tar.gz
+          tar xzf net-snmp.tar.gz
+          cd net-snmp-${NETSNMP_VERSION}
+          ./configure \
+            --prefix=/mingw64 \
+            --with-default-snmp-version=3 \
+            --with-openssl \
+            --disable-agent \
+            --disable-applications \
+            --disable-manuals \
+            --disable-scripts \
+            --disable-mibs \
+            --disable-embedded-perl \
+            --without-perl-modules \
+            --without-python-modules
+          make -j$(nproc)
+          make install
 
       - name: Configure
         run: |
@@ -153,19 +196,18 @@ jobs:
           mkdir -p dist
           cp build/SNMPBrowser.exe dist/
 
-          # Deploy Qt runtime + QML modules
+          # Qt runtime + QML modules
           windeployqt6 --release \
             --qmldir resources/qml \
             --no-translations \
             dist/SNMPBrowser.exe
 
-          # Copy net-snmp DLL and MinGW C++ runtime DLLs
-          for dll in netsnmp libgcc_s_seh-1 libstdc++-6 libwinpthread-1; do
-            find /mingw64/bin -name "${dll}*.dll" -exec cp {} dist/ \;
+          # net-snmp + MinGW C++ runtime + OpenSSL
+          for pattern in 'libnetsnmp*.dll' 'libgcc_s_seh-*.dll' 'libstdc++-*.dll' \
+                         'libwinpthread-*.dll' 'libssl-*.dll' 'libcrypto-*.dll'; do
+            find /mingw64/bin -maxdepth 1 -name "$pattern" -exec cp {} dist/ \;
           done
-          # Copy OpenSSL (net-snmp dependency for v3 auth/privacy)
-          find /mingw64/bin \( -name "libssl-*.dll" -o -name "libcrypto-*.dll" \) \
-            -exec cp {} dist/ \; 2>/dev/null || true
+          ls -la dist/
 
       - name: Build installer (InnoSetup)
         shell: pwsh
