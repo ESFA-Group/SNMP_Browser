@@ -224,7 +224,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.NETSNMP_PREFIX }}
-          key: netsnmp-${{ env.NETSNMP_VERSION }}-msvc-x64-v4
+          key: netsnmp-${{ env.NETSNMP_VERSION }}-msvc-x64-v5
 
       - name: Download net-snmp source
         if: steps.cache-netsnmp.outputs.cache-hit != 'true'
@@ -260,13 +260,34 @@ jobs:
       - name: Normalize net-snmp install layout
         shell: pwsh
         run: |
+          $includeDir = "${{ env.NETSNMP_PREFIX }}\include"
           $libDir = "${{ env.NETSNMP_PREFIX }}\lib"
           $binDir = "${{ env.NETSNMP_PREFIX }}\bin"
           $libTarget = Join-Path $libDir "netsnmp.lib"
+          $headerTarget = Join-Path $includeDir "net-snmp\net-snmp-includes.h"
           $dllTargetDir = $binDir
 
+          New-Item -ItemType Directory -Force $includeDir | Out-Null
           New-Item -ItemType Directory -Force $libDir | Out-Null
           New-Item -ItemType Directory -Force $binDir | Out-Null
+
+          $header = Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Filter net-snmp-includes.h -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -ine $headerTarget } |
+            Select-Object -First 1
+
+          if ($header) {
+            $sourceIncludeDir = Split-Path (Split-Path $header.FullName -Parent) -Parent
+            Write-Host "Copying Net-SNMP headers from $sourceIncludeDir to $includeDir"
+            Copy-Item (Join-Path $sourceIncludeDir "*") $includeDir -Recurse -Force
+          } elseif (-not (Test-Path $headerTarget)) {
+            Write-Host "Could not find net-snmp/net-snmp-includes.h. Current include files:"
+            Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Include "*.h" -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match "net-snmp|snmp" } |
+              Select-Object -ExpandProperty FullName
+            exit 1
+          } else {
+            Write-Host "Net-SNMP headers already normalized at $includeDir"
+          }
 
           $lib = Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Filter netsnmp.lib -ErrorAction SilentlyContinue |
             Where-Object { $_.FullName -ine $libTarget } |
