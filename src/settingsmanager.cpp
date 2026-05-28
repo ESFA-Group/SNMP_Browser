@@ -1,9 +1,11 @@
 #include "settingsmanager.h"
+#include <QCoreApplication>
 #include <QDir>
+#include <QStandardPaths>
 
 SettingsManager::SettingsManager(QObject* parent)
     : QObject(parent)
-    , m_settings("MyCompany", "SnmpBrowser")
+    , m_settings("ESFA Group", "SNMPBrowser")
     , m_port(161)
     , m_theme("dark")
 {
@@ -13,6 +15,32 @@ SettingsManager::SettingsManager(QObject* parent)
 SettingsManager::~SettingsManager()
 {
     save();
+}
+
+QString SettingsManager::platformDefaultMibPath()
+{
+#ifdef Q_OS_WIN
+    return QDir::cleanPath(QCoreApplication::applicationDirPath() + "/mibs");
+#elif defined(Q_OS_MACOS)
+    return QDir::cleanPath(QCoreApplication::applicationDirPath() + "/../Resources/mibs");
+#else
+    const QString bundledPath = QDir::cleanPath(QCoreApplication::applicationDirPath() + "/../share/snmp/mibs");
+    if (QDir(bundledPath).exists()) {
+        return bundledPath;
+    }
+
+    const QString systemPath = QStringLiteral("/usr/share/snmp/mibs");
+    if (QDir(systemPath).exists()) {
+        return systemPath;
+    }
+
+    return bundledPath;
+#endif
+}
+
+QString SettingsManager::defaultMibPath() const
+{
+    return platformDefaultMibPath();
 }
 
 QString SettingsManager::ip() const
@@ -120,17 +148,20 @@ void SettingsManager::save()
 
 void SettingsManager::load()
 {
+    const QString initialMibPath = platformDefaultMibPath();
+
     m_ip = m_settings.value("ip", "192.168.1.1").toString();
     m_port = m_settings.value("port", 161).toInt();
     m_username = m_settings.value("username", "admin").toString();
     m_authKey = m_settings.value("auth_key", "").toString();
     m_privKey = m_settings.value("priv_key", "").toString();
-    m_mibPath = m_settings.value("mib_path", "").toString();
+    m_mibPath = m_settings.value("mib_path", initialMibPath).toString();
     m_theme = m_settings.value("theme", "dark").toString();
     
-    // Validate MIB path
+    // Validate MIB path. If a saved path disappeared, fall back to the packaged
+    // or OS-default MIB folder instead of leaving the app with an empty source.
     if (!m_mibPath.isEmpty() && !QDir(m_mibPath).exists()) {
-        m_mibPath.clear();
+        m_mibPath = initialMibPath;
     }
     
     emit ipChanged();
