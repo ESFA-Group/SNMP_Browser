@@ -7,7 +7,7 @@
 #endif
 
 #define MyAppName      "SNMP Browser"
-#define MyAppPublisher "Phoenix-flame"
+#define MyAppPublisher "ESFA Group"
 #define MyAppExeName   "SNMPBrowser.exe"
 #define MyAppSourceDir "..\dist"
 #define MyOutputDir    "output"
@@ -17,7 +17,7 @@ AppId={{6A8B2C3D-4E5F-7A6B-8C9D-0E1F2A3B4C5D}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-AppPublisherURL=https://github.com/Phoenix-flame/SNMP_Browser
+AppPublisherURL=https://esfagroup.com
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes

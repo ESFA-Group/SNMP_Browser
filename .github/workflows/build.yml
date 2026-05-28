@@ -2,10 +2,9 @@ name: Build and Package
 
 on:
   push:
-    branches: [master]
-    tags: ['v*']
-  pull_request:
-    branches: [master]
+    tags:
+      - 'v*'
+
   workflow_dispatch:
 
 env:
