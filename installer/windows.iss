@@ -9,7 +9,7 @@
 #define MyAppName      "SNMP Browser"
 #define MyAppPublisher "Phoenix-flame"
 #define MyAppExeName   "SNMPBrowser.exe"
-#define MyAppSourceDir "..\build\Release"
+#define MyAppSourceDir "..\dist"
 #define MyOutputDir    "output"
 
 [Setup]

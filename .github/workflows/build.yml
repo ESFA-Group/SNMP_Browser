@@ -97,12 +97,12 @@ jobs:
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
           QML_SOURCES_PATHS: ${{ github.workspace }}/resources/qml
+          OUTPUT: ${{ env.APP_NAME }}-${{ env.APP_VERSION }}-linux-${{ matrix.arch }}.AppImage
         run: |
           ./linuxdeploy.AppImage \
             --appdir AppDir \
             --plugin qt \
             --output appimage
-          mv *.AppImage ${{ env.APP_NAME }}-${{ env.APP_VERSION }}-linux-${{ matrix.arch }}.AppImage
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -111,61 +111,68 @@ jobs:
           path: ${{ env.APP_NAME }}-*-linux-${{ matrix.arch }}.AppImage
 
   # ──────────────────────────────────────────────────────────────
-  # Windows x86_64  (MSVC 2022, Qt via aqtinstall, InnoSetup)
+  # Windows x86_64  (MSYS2/MinGW64 — net-snmp has no vcpkg port)
   # ──────────────────────────────────────────────────────────────
   build-windows:
     name: Windows x86_64
     runs-on: windows-latest
 
+    # All `run:` steps use the MSYS2 shell unless overridden with shell: pwsh
+    defaults:
+      run:
+        shell: msys2 {0}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Qt 6
-        uses: jurplel/install-qt-action@v3
+      - name: Setup MSYS2 with Qt6 and net-snmp
+        uses: msys2/setup-msys2@v2
         with:
-          version: '6.8.1'
-          host: windows
-          target: desktop
-          arch: win64_msvc2022_64
-          cache: true
-
-      - name: Cache vcpkg packages
-        uses: actions/cache@v4
-        with:
-          path: C:\vcpkg\installed
-          key: vcpkg-net-snmp-x64-windows-${{ hashFiles('**/CMakeLists.txt') }}
-          restore-keys: vcpkg-net-snmp-x64-windows-
-
-      - name: Install net-snmp (vcpkg)
-        run: vcpkg install net-snmp:x64-windows
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-qt6-base
+            mingw-w64-x86_64-qt6-declarative
+            mingw-w64-x86_64-qt6-shadertools
+            mingw-w64-x86_64-qt6-tools
+            mingw-w64-x86_64-net-snmp
 
       - name: Configure
         run: |
-          cmake -B build `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
-            -DVCPKG_TARGET_TRIPLET=x64-windows
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        run: cmake --build build --config Release -j $env:NUMBER_OF_PROCESSORS
+        run: cmake --build build -j$(nproc)
 
-      - name: Deploy Qt runtime
+      - name: Deploy to dist/
         run: |
-          windeployqt `
-            --release `
-            --qmldir resources/qml `
-            --no-translations `
-            build\Release\${{ env.APP_NAME }}.exe
+          mkdir -p dist
+          cp build/SNMPBrowser.exe dist/
 
-      - name: Copy vcpkg runtime DLLs
-        run: |
-          Get-ChildItem C:\vcpkg\installed\x64-windows\bin\*.dll |
-            Copy-Item -Destination build\Release\
+          # Deploy Qt runtime + QML modules
+          windeployqt6 --release \
+            --qmldir resources/qml \
+            --no-translations \
+            dist/SNMPBrowser.exe
+
+          # Copy net-snmp DLL and MinGW C++ runtime DLLs
+          for dll in netsnmp libgcc_s_seh-1 libstdc++-6 libwinpthread-1; do
+            find /mingw64/bin -name "${dll}*.dll" -exec cp {} dist/ \;
+          done
+          # Copy OpenSSL (net-snmp dependency for v3 auth/privacy)
+          find /mingw64/bin \( -name "libssl-*.dll" -o -name "libcrypto-*.dll" \) \
+            -exec cp {} dist/ \; 2>/dev/null || true
 
       - name: Build installer (InnoSetup)
+        shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
             /DMyAppVersion=${{ env.APP_VERSION }} `
+            "/DMyAppSourceDir=..\dist" `
             installer\windows.iss
 
       - name: Upload artifact
