@@ -177,12 +177,11 @@ jobs:
             --config=release ^
             --prefix=${{ env.NETSNMP_PREFIX }} ^
             --with-ssl ^
-            --with-sdk ^
-            --with-default-snmp-version=3
+            --with-sdk
           if errorlevel 1 exit /b 1
-          nmake /f Makefile-out
+          nmake
           if errorlevel 1 exit /b 1
-          nmake /f Makefile-out install
+          nmake install
           if errorlevel 1 exit /b 1
 
       - name: Configure (CMake)
