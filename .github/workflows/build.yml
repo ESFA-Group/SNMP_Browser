@@ -224,7 +224,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.NETSNMP_PREFIX }}
-          key: netsnmp-${{ env.NETSNMP_VERSION }}-msvc-x64-v5
+          key: netsnmp-${{ env.NETSNMP_VERSION }}-msvc-x64-v6
 
       - name: Download net-snmp source
         if: steps.cache-netsnmp.outputs.cache-hit != 'true'
@@ -265,6 +265,7 @@ jobs:
           $binDir = "${{ env.NETSNMP_PREFIX }}\bin"
           $libTarget = Join-Path $libDir "netsnmp.lib"
           $headerTarget = Join-Path $includeDir "net-snmp\net-snmp-includes.h"
+          $securityHeaderTarget = Join-Path $includeDir "net-snmp\library\snmpv3-security-includes.h"
           $dllTargetDir = $binDir
 
           New-Item -ItemType Directory -Force $includeDir | Out-Null
@@ -277,16 +278,39 @@ jobs:
 
           if ($header) {
             $sourceIncludeDir = Split-Path (Split-Path $header.FullName -Parent) -Parent
-            Write-Host "Copying Net-SNMP headers from $sourceIncludeDir to $includeDir"
+            Write-Host "Copying Net-SNMP include tree from $sourceIncludeDir to $includeDir"
             Copy-Item (Join-Path $sourceIncludeDir "*") $includeDir -Recurse -Force
-          } elseif (-not (Test-Path $headerTarget)) {
-            Write-Host "Could not find net-snmp/net-snmp-includes.h. Current include files:"
+          }
+
+          # Net-SNMP's MSVC build generates a few headers outside the installed
+          # include root. Copy every header below a net-snmp path while preserving
+          # the path from the net-snmp directory onward.
+          Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Include "*.h" -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match "\\net-snmp\\" } |
+            ForEach-Object {
+              $sourcePath = $_.FullName
+              $matchIndex = $sourcePath.ToLowerInvariant().LastIndexOf("\net-snmp\")
+              if ($matchIndex -lt 0) { return }
+              $relativePath = $sourcePath.Substring($matchIndex + 1)
+              $targetPath = Join-Path $includeDir $relativePath
+              if ($sourcePath -ieq $targetPath) { return }
+              New-Item -ItemType Directory -Force (Split-Path $targetPath -Parent) | Out-Null
+              Copy-Item $sourcePath $targetPath -Force
+            }
+
+          if (-not (Test-Path $headerTarget)) {
+            Write-Host "Could not find net-snmp/net-snmp-includes.h after normalization. Current include files:"
             Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Include "*.h" -ErrorAction SilentlyContinue |
               Where-Object { $_.FullName -match "net-snmp|snmp" } |
               Select-Object -ExpandProperty FullName
             exit 1
-          } else {
-            Write-Host "Net-SNMP headers already normalized at $includeDir"
+          }
+
+          if (-not (Test-Path $securityHeaderTarget)) {
+            Write-Host "Could not find net-snmp/library/snmpv3-security-includes.h after normalization. Current matching files:"
+            Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Include "*security*includes*.h","snmpv3*.h" -ErrorAction SilentlyContinue |
+              Select-Object -ExpandProperty FullName
+            exit 1
           }
 
           $lib = Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Filter netsnmp.lib -ErrorAction SilentlyContinue |
