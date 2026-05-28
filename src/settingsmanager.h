@@ -43,6 +43,7 @@ public:
 
     Q_INVOKABLE void save();
     Q_INVOKABLE void load();
+    Q_INVOKABLE QString defaultMibPath() const;
 
 signals:
     void ipChanged();
@@ -54,6 +55,8 @@ signals:
     void themeChanged();
 
 private:
+    static QString platformDefaultMibPath();
+
     QSettings m_settings;
     QString m_ip;
     int m_port;
