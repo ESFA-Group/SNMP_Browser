@@ -158,12 +158,14 @@ jobs:
 
       - name: Download net-snmp source
         if: steps.cache-netsnmp.outputs.cache-hit != 'true'
-        shell: pwsh
+        shell: cmd
         run: |
-          Invoke-WebRequest -UseBasicParsing `
-            -Uri "https://sourceforge.net/projects/net-snmp/files/net-snmp/${{ env.NETSNMP_VERSION }}/net-snmp-${{ env.NETSNMP_VERSION }}.zip/download" `
-            -OutFile net-snmp.zip
-          Expand-Archive -Path net-snmp.zip -DestinationPath .
+          curl -L --fail --retry 3 -o net-snmp.zip ^
+            "https://downloads.sourceforge.net/project/net-snmp/net-snmp/${{ env.NETSNMP_VERSION }}/net-snmp-${{ env.NETSNMP_VERSION }}.zip"
+          if errorlevel 1 exit /b 1
+          tar -xf net-snmp.zip
+          if errorlevel 1 exit /b 1
+          dir net-snmp-${{ env.NETSNMP_VERSION }}
 
       - name: Build net-snmp (win32/Configure + nmake)
         if: steps.cache-netsnmp.outputs.cache-hit != 'true'
