@@ -224,7 +224,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.NETSNMP_PREFIX }}
-          key: netsnmp-${{ env.NETSNMP_VERSION }}-msvc-x64-v3
+          key: netsnmp-${{ env.NETSNMP_VERSION }}-msvc-x64-v4
 
       - name: Download net-snmp source
         if: steps.cache-netsnmp.outputs.cache-hit != 'true'
@@ -257,11 +257,35 @@ jobs:
           nmake install
           if errorlevel 1 exit /b 1
 
+      - name: Normalize net-snmp install layout
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "${{ env.NETSNMP_PREFIX }}\lib" | Out-Null
+          New-Item -ItemType Directory -Force "${{ env.NETSNMP_PREFIX }}\bin" | Out-Null
+
+          $lib = Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Filter netsnmp.lib -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\release\\|\\lib\\' } |
+            Select-Object -First 1
+          if (-not $lib) {
+            Write-Host "Could not find netsnmp.lib. Current Net-SNMP files:"
+            Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Include "*snmp*.lib","*snmp*.dll" -ErrorAction SilentlyContinue |
+              Select-Object -ExpandProperty FullName
+            exit 1
+          }
+          Copy-Item $lib.FullName "${{ env.NETSNMP_PREFIX }}\lib\netsnmp.lib" -Force
+
+          Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Filter netsnmp.dll -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "${{ env.NETSNMP_PREFIX }}\bin" -Force
+
+          Get-ChildItem -Path "${{ env.NETSNMP_PREFIX }}" -Recurse |
+            Select-Object -ExpandProperty FullName
+
       - name: Configure (CMake)
         shell: cmd
         run: |
           cmake -B build -G Ninja ^
             -DCMAKE_BUILD_TYPE=Release ^
+            -DNET_SNMP_ROOT="${{ env.NETSNMP_PREFIX }}" ^
             -DCMAKE_PREFIX_PATH="${{ env.NETSNMP_PREFIX }}"
 
       - name: Build
