@@ -3,5 +3,7 @@
     <qresource prefix="/">
         <file>qml/Main.qml</file>
         <file>qml/AppTitleBar.qml</file>
+        <file>qml/SplashScreen.qml</file>
+        <file>assets/esfa-logo.svg</file>
     </qresource>
 </RCC>
