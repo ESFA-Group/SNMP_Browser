@@ -41,6 +41,7 @@ jobs:
             qt6-declarative-dev \
             qml6-module-qtqml-workerscript \
             qml6-module-qtquick \
+            qml6-module-qtquick-window \
             qml6-module-qtquick-controls \
             qml6-module-qtquick-layouts \
             qml6-module-qtquick-dialogs \
@@ -119,6 +120,7 @@ jobs:
 
           test -d "$QT_QML_DIR/QtQml/WorkerScript"
           test -d "$QT_QML_DIR/QtQuick"
+          test -d "$QT_QML_DIR/QtQuick/Window"
           test -d "$QT_QML_DIR/QtQuick/Controls"
           test -d "$QT_QML_DIR/QtQuick/Layouts"
           test -d "$QT_QML_DIR/QtQuick/Dialogs"
