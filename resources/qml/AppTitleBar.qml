@@ -26,7 +26,7 @@ Rectangle {
     signal closeRequested()
     signal themeToggleRequested()
 
-    implicitHeight: 60
+    implicitHeight: 64
     color: surfaceColor
 
     Rectangle {
@@ -51,17 +51,19 @@ Rectangle {
         spacing: 12
 
         Rectangle {
-            Layout.preferredWidth: 40
-            Layout.preferredHeight: 40
+            Layout.preferredWidth: 132
+            Layout.preferredHeight: 44
             radius: 12
-            color: root.accentColor
+            color: root.isDarkTheme ? "#FFFFFF" : "#EEF8FA"
+            border.width: 1
+            border.color: root.isDarkTheme ? "#26343B" : "#D7ECEF"
 
-            Text {
-                anchors.centerIn: parent
-                text: "E"
-                color: "white"
-                font.pixelSize: 21
-                font.bold: true
+            Image {
+                anchors.fill: parent
+                anchors.margins: 9
+                source: "qrc:/assets/esfa-logo.svg"
+                fillMode: Image.PreserveAspectFit
+                smooth: true
             }
 
             Rectangle {
@@ -72,13 +74,13 @@ Rectangle {
                 anchors.bottom: parent.bottom
                 anchors.rightMargin: 5
                 anchors.bottomMargin: 5
-                color: root.isScanning ? "#76FF03" : "#FFFFFF"
-                opacity: root.isScanning ? 1.0 : 0.65
+                color: root.isScanning ? "#76FF03" : root.accentColor
+                opacity: root.isScanning ? 1.0 : 0.75
             }
         }
 
         ColumnLayout {
-            Layout.preferredWidth: 190
+            Layout.preferredWidth: 170
             spacing: 1
 
             Text {
