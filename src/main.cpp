@@ -2,8 +2,10 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QQuickView>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
+#include <QTimer>
 #include <QIcon>
 
 #include "snmpcontroller.h"
@@ -37,6 +39,14 @@ int main(int argc, char *argv[])
     
     // Set Quick Controls style
     QQuickStyle::setStyle("Basic");
+
+    QQuickView splashView;
+    splashView.setFlags(Qt::SplashScreen | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    splashView.setColor(Qt::transparent);
+    splashView.setResizeMode(QQuickView::SizeRootObjectToView);
+    splashView.resize(560, 340);
+    splashView.setSource(QUrl(QStringLiteral("qrc:/qml/SplashScreen.qml")));
+    splashView.show();
     
     // Register QML types
     qmlRegisterType<TreeModel>("SNMPBrowser", 1, 0, "TreeModel");
@@ -55,9 +65,15 @@ int main(int argc, char *argv[])
     const QUrl url(QStringLiteral("qrc:/qml/Main.qml"));
     
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated,
-                     &app, [url](QObject *obj, const QUrl &objUrl) {
-        if (!obj && url == objUrl)
+                     &app, [&splashView, url](QObject *obj, const QUrl &objUrl) {
+        if (!obj && url == objUrl) {
             QCoreApplication::exit(-1);
+            return;
+        }
+
+        if (obj && url == objUrl) {
+            QTimer::singleShot(1500, &splashView, &QQuickView::close);
+        }
     }, Qt::QueuedConnection);
     
     engine.load(url);
