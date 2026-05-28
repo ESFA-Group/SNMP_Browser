@@ -70,8 +70,9 @@ set(HEADERS
 # QML Resources
 qt_add_resources(QML_RESOURCES ${CMAKE_CURRENT_SOURCE_DIR}/resources/qml.qrc)
 
-# Create executable
-qt_add_executable(${PROJECT_NAME}
+# Create executable. WIN32 prevents Windows release builds from opening a
+# separate console window beside the Qt Quick GUI.
+qt_add_executable(${PROJECT_NAME} WIN32 MACOSX_BUNDLE
     ${SOURCES}
     ${HEADERS}
     ${QML_RESOURCES}
@@ -82,6 +83,10 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${NET_SNMP_INCLUDE}
 )
+
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /utf-8)
+endif()
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
