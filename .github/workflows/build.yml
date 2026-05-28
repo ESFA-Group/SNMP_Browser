@@ -149,12 +149,24 @@ jobs:
         shell: cmd
         run: vcpkg install openssl:x64-windows --recurse
 
+      - name: Prepare OpenSSL environment for MSVC
+        shell: cmd
+        run: |
+          if not exist "${{ env.OPENSSL_DIR }}\include\openssl\ossl_typ.h" (
+            echo OpenSSL headers not found under ${{ env.OPENSSL_DIR }}\include
+            dir "${{ env.OPENSSL_DIR }}" /s /b | findstr /i "ossl_typ.h"
+            exit /b 1
+          )
+          echo INCLUDE=${{ env.OPENSSL_DIR }}\include;%INCLUDE%>>%GITHUB_ENV%
+          echo LIB=${{ env.OPENSSL_DIR }}\lib;%LIB%>>%GITHUB_ENV%
+          echo PATH=${{ env.OPENSSL_DIR }}\bin;%PATH%>>%GITHUB_ENV%
+
       - name: Cache net-snmp install
         id: cache-netsnmp
         uses: actions/cache@v4
         with:
           path: ${{ env.NETSNMP_PREFIX }}
-          key: netsnmp-${{ env.NETSNMP_VERSION }}-msvc-x64-v1
+          key: netsnmp-${{ env.NETSNMP_VERSION }}-msvc-x64-v2
 
       - name: Download net-snmp source
         if: steps.cache-netsnmp.outputs.cache-hit != 'true'
@@ -172,6 +184,9 @@ jobs:
         shell: cmd
         working-directory: net-snmp-${{ env.NETSNMP_VERSION }}\win32
         run: |
+          set INCLUDE=${{ env.OPENSSL_DIR }}\include;%INCLUDE%
+          set LIB=${{ env.OPENSSL_DIR }}\lib;%LIB%
+          set PATH=${{ env.OPENSSL_DIR }}\bin;%PATH%
           perl Configure ^
             --linktype=dynamic ^
             --config=release ^
