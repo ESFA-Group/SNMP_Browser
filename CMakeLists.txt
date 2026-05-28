@@ -6,20 +6,39 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
+include(GNUInstallDirs)
 
 # Find Qt packages
-find_package(Qt6 REQUIRED COMPONENTS 
-    Core 
-    Gui 
-    Qml 
-    Quick 
+find_package(Qt6 REQUIRED COMPONENTS
+    Core
+    Gui
+    Qml
+    Quick
     QuickControls2
     Concurrent
 )
 
-# Find net-snmp library
-find_library(NET_SNMP_LIB netsnmp REQUIRED)
-find_path(NET_SNMP_INCLUDE net-snmp/net-snmp-config.h)
+# Find net-snmp library. Net-SNMP's legacy MSVC win32 build installs import
+# libraries under lib/release or lib/debug, while Unix packages usually install
+# directly under lib. Search both layouts so CMAKE_PREFIX_PATH is enough for CI.
+find_library(NET_SNMP_LIB
+    NAMES netsnmp
+    PATH_SUFFIXES
+        lib
+        lib/release
+        lib/debug
+        lib/${CMAKE_BUILD_TYPE}
+    REQUIRED
+)
+
+find_path(NET_SNMP_INCLUDE
+    NAMES net-snmp/net-snmp-config.h
+    PATH_SUFFIXES include
+    REQUIRED
+)
+
+message(STATUS "NET_SNMP_LIB=${NET_SNMP_LIB}")
+message(STATUS "NET_SNMP_INCLUDE=${NET_SNMP_INCLUDE}")
 
 # Source files
 set(SOURCES
