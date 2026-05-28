@@ -5,6 +5,7 @@
 #include <QQuickView>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
+#include <QCursor>
 #include <QScreen>
 #include <QTimer>
 #include <QIcon>
