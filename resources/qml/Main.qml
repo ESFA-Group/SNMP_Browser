@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import QtQuick.Window
 import Qt.labs.platform as Platform
 
 ApplicationWindow {
@@ -9,12 +10,13 @@ ApplicationWindow {
     visible: true
     width: 1100
     height: 750
+    minimumWidth: 900
+    minimumHeight: 620
     title: "SNMPv3 Browser & MIB Loader"
-    
-    // Theme management
+    flags: Qt.Window | Qt.FramelessWindowHint
+
     property bool isDarkTheme: controller.settings.theme === "dark"
-    
-    // Colors based on theme
+
     property color bgColor: isDarkTheme ? "#121212" : "#F5F5F5"
     property color panelColor: isDarkTheme ? "#1E1E1E" : "#FFFFFF"
     property color textColor: isDarkTheme ? "#E0E0E0" : "#212121"
@@ -23,34 +25,58 @@ ApplicationWindow {
     property color inputBgColor: isDarkTheme ? "#2C2C2C" : "#FFFFFF"
     property color headerBgColor: isDarkTheme ? "#2C2C2C" : "#EEEEEE"
     property color alternateRowColor: isDarkTheme ? "#252525" : "#F0F0F0"
-    property color accentColor: "#4CAF50"
-    property color groupTitleColor: isDarkTheme ? "#81C784" : "#2E7D32"
-    
+    property color accentColor: "#0097A7"
+    property color groupTitleColor: isDarkTheme ? "#4DD0E1" : "#007C89"
+
     color: bgColor
-    
-    Component.onCompleted: {
-        controller.settings.load()
+
+    function toggleMaximized() {
+        if (window.visibility === Window.Maximized)
+            window.showNormal()
+        else
+            window.showMaximized()
     }
-    
-    Component.onDestruction: {
-        controller.settings.save()
+
+    Component.onCompleted: controller.settings.load()
+    Component.onDestruction: controller.settings.save()
+
+    header: AppTitleBar {
+        isDarkTheme: window.isDarkTheme
+        isScanning: controller.isScanning
+        itemCount: controller.treeModel.itemCount
+        appTitle: "SNMP Browser"
+        appSubtitle: "ESFA SNMPv3 MIB Loader"
+        hostText: controller.settings.ip
+        portText: controller.settings.port.toString()
+        mibText: controller.settings.mibPath ? controller.settings.mibPath.split('/').pop() : "No MIB loaded"
+        statusText: controller.statusMessage
+        accentColor: window.accentColor
+
+        onDragRequested: window.startSystemMove()
+        onMinimizeRequested: window.showMinimized()
+        onMaximizeRestoreRequested: window.toggleMaximized()
+        onCloseRequested: window.close()
+        onThemeToggleRequested: controller.settings.theme = window.isDarkTheme ? "light" : "dark"
     }
-    
-    // Error dialog
+
+    background: Rectangle {
+        color: bgColor
+        border.color: borderColor
+        border.width: window.visibility === Window.Maximized ? 0 : 1
+    }
+
     MessageDialog {
         id: errorDialog
         title: "Error"
         buttons: MessageDialog.Ok
     }
-    
-    // Info dialog
+
     MessageDialog {
         id: infoDialog
         title: "Information"
         buttons: MessageDialog.Ok
     }
-    
-    // Compile report dialog
+
     Dialog {
         id: compileReportDialog
         title: "MIB Compilation Report"
@@ -58,22 +84,21 @@ ApplicationWindow {
         height: 400
         anchors.centerIn: parent
         standardButtons: Dialog.Ok
-        
         property string reportText: ""
-        
+
         ColumnLayout {
             anchors.fill: parent
             spacing: 10
-            
+
             Label {
                 text: "Compilation process completed."
                 color: textColor
             }
-            
+
             ScrollView {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                
+
                 TextArea {
                     text: compileReportDialog.reportText
                     readOnly: true
@@ -88,196 +113,134 @@ ApplicationWindow {
             }
         }
     }
-    
-    // MIB folder dialog
+
     FolderDialog {
         id: mibFolderDialog
         title: "Select Folder containing .mib files"
-        onAccepted: {
-            controller.selectMibFolder(selectedFolder)
-        }
+        onAccepted: controller.selectMibFolder(selectedFolder)
     }
-    
-    // Export file dialog
+
     FileDialog {
         id: exportFileDialog
         title: "Save Snapshot"
         fileMode: FileDialog.SaveFile
         nameFilters: ["CSV Files (*.csv)", "JSON Files (*.json)"]
-        currentFile: "snmp_snapshot_" + controller.settings.ip.replace(/\./g, "-") + "_" + 
+        currentFile: "snmp_snapshot_" + controller.settings.ip.replace(/\./g, "-") + "_" +
                      Qt.formatDateTime(new Date(), "yyyyMMdd_hhmmss") + ".csv"
-        onAccepted: {
-            controller.exportSnapshot(selectedFile)
-        }
+        onAccepted: controller.exportSnapshot(selectedFile)
     }
-    
-    // Connections for controller signals
+
     Connections {
         target: controller
-        
+
         function onErrorOccurred(title, message) {
             errorDialog.title = title
             errorDialog.text = message
             errorDialog.open()
         }
-        
+
         function onInfoMessage(title, message) {
             infoDialog.title = title
             infoDialog.text = message
             infoDialog.open()
         }
-        
+
         function onCompileFinished(report) {
             compileReportDialog.reportText = report
             compileReportDialog.open()
         }
     }
-    
-    // Main content
+
     SplitView {
         anchors.fill: parent
+        anchors.margins: window.visibility === Window.Maximized ? 0 : 1
         orientation: Qt.Horizontal
-        
+
         handle: Rectangle {
             implicitWidth: 1
             color: borderColor
         }
-        
-        // Left Panel
+
         Rectangle {
             SplitView.preferredWidth: 340
             SplitView.minimumWidth: 280
             color: bgColor
-            
+
             ScrollView {
                 anchors.fill: parent
                 anchors.margins: 20
                 contentWidth: availableWidth
-                
+
                 ColumnLayout {
                     width: parent.width
                     spacing: 15
-                    
-                    // Header
+
                     Label {
-                        text: "SNMP Browser"
+                        text: "Connection Settings"
                         font.pixelSize: 20
                         font.bold: true
                         color: textColor
                     }
-                    
-                    // Theme toggle button
-                    Button {
-                        Layout.fillWidth: true
-                        text: isDarkTheme ? "Switch to Light Mode ☀" : "Switch to Dark Mode 🌙"
-                        
-                        background: Rectangle {
-                            color: parent.pressed ? Qt.darker(inputBgColor, 1.1) : 
-                                   parent.hovered ? Qt.lighter(inputBgColor, 1.1) : inputBgColor
-                            border.color: borderColor
-                            border.width: 1
-                            radius: 4
-                        }
-                        
-                        contentItem: Text {
-                            text: parent.text
-                            color: textColor
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            font.bold: true
-                        }
-                        
-                        onClicked: {
-                            controller.settings.theme = isDarkTheme ? "light" : "dark"
-                        }
-                    }
-                    
-                    // Separator
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 1
-                        color: borderColor
-                    }
-                    
-                    // Connection Settings Group
+
                     GroupBox {
                         Layout.fillWidth: true
-                        title: "CONNECTION SETTINGS"
-                        
+                        title: "SNMPV3 DEVICE"
+
                         label: Label {
                             text: parent.title
                             color: groupTitleColor
                             font.bold: true
                         }
-                        
+
                         background: Rectangle {
                             y: parent.topPadding - parent.bottomPadding
                             width: parent.width
                             height: parent.height - parent.topPadding + parent.bottomPadding
                             color: "transparent"
                             border.color: borderColor
-                            radius: 6
+                            radius: 8
                         }
-                        
+
                         GridLayout {
                             anchors.fill: parent
                             columns: 2
                             columnSpacing: 10
                             rowSpacing: 10
-                            
+
                             Label { text: "Host IP:"; color: textColor }
                             TextField {
-                                id: ipInput
                                 Layout.fillWidth: true
                                 text: controller.settings.ip
                                 onTextChanged: controller.settings.ip = text
                                 color: textColor
                                 placeholderTextColor: secondaryTextColor
-                                background: Rectangle {
-                                    color: inputBgColor
-                                    border.color: parent.activeFocus ? accentColor : borderColor
-                                    border.width: parent.activeFocus ? 2 : 1
-                                    radius: 4
-                                }
+                                background: inputBackground
                             }
-                            
+
                             Label { text: "Port:"; color: textColor }
                             TextField {
-                                id: portInput
                                 Layout.fillWidth: true
                                 text: controller.settings.port.toString()
+                                validator: IntValidator { bottom: 1; top: 65535 }
                                 onTextChanged: {
                                     var val = parseInt(text)
                                     if (!isNaN(val)) controller.settings.port = val
                                 }
                                 color: textColor
-                                validator: IntValidator { bottom: 1; top: 65535 }
-                                background: Rectangle {
-                                    color: inputBgColor
-                                    border.color: parent.activeFocus ? accentColor : borderColor
-                                    border.width: parent.activeFocus ? 2 : 1
-                                    radius: 4
-                                }
+                                background: inputBackground
                             }
-                            
+
                             Label { text: "User:"; color: textColor }
                             TextField {
-                                id: userInput
                                 Layout.fillWidth: true
                                 text: controller.settings.username
                                 onTextChanged: controller.settings.username = text
                                 color: textColor
-                                background: Rectangle {
-                                    color: inputBgColor
-                                    border.color: parent.activeFocus ? accentColor : borderColor
-                                    border.width: parent.activeFocus ? 2 : 1
-                                    radius: 4
-                                }
+                                background: inputBackground
                             }
-                            
+
                             Label { text: "Auth Key:"; color: textColor }
                             TextField {
-                                id: authInput
                                 Layout.fillWidth: true
                                 text: controller.settings.authKey
                                 onTextChanged: controller.settings.authKey = text
@@ -285,17 +248,11 @@ ApplicationWindow {
                                 echoMode: TextInput.Password
                                 color: textColor
                                 placeholderTextColor: secondaryTextColor
-                                background: Rectangle {
-                                    color: inputBgColor
-                                    border.color: parent.activeFocus ? accentColor : borderColor
-                                    border.width: parent.activeFocus ? 2 : 1
-                                    radius: 4
-                                }
+                                background: inputBackground
                             }
-                            
+
                             Label { text: "Priv Key:"; color: textColor }
                             TextField {
-                                id: privInput
                                 Layout.fillWidth: true
                                 text: controller.settings.privKey
                                 onTextChanged: controller.settings.privKey = text
@@ -303,128 +260,84 @@ ApplicationWindow {
                                 echoMode: TextInput.Password
                                 color: textColor
                                 placeholderTextColor: secondaryTextColor
-                                background: Rectangle {
-                                    color: inputBgColor
-                                    border.color: parent.activeFocus ? accentColor : borderColor
-                                    border.width: parent.activeFocus ? 2 : 1
-                                    radius: 4
-                                }
+                                background: inputBackground
                             }
                         }
                     }
-                    
-                    // MIB Definitions Group
+
                     GroupBox {
                         Layout.fillWidth: true
                         title: "MIB DEFINITIONS"
-                        
+
                         label: Label {
                             text: parent.title
                             color: groupTitleColor
                             font.bold: true
                         }
-                        
+
                         background: Rectangle {
                             y: parent.topPadding - parent.bottomPadding
                             width: parent.width
                             height: parent.height - parent.topPadding + parent.bottomPadding
                             color: "transparent"
                             border.color: borderColor
-                            radius: 6
+                            radius: 8
                         }
-                        
+
                         ColumnLayout {
                             anchors.fill: parent
                             spacing: 10
-                            
+
                             Label {
-                                text: controller.settings.mibPath ? 
+                                text: controller.settings.mibPath ?
                                       "Loaded: " + controller.settings.mibPath.split('/').pop() :
                                       "No MIB source selected"
                                 color: controller.settings.mibPath ? accentColor : secondaryTextColor
                                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                                 Layout.fillWidth: true
                             }
-                            
+
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 10
-                                
+
                                 Button {
                                     Layout.fillWidth: true
                                     text: "Select Folder"
                                     enabled: !controller.isCompiling
-                                    
-                                    background: Rectangle {
-                                        color: parent.enabled ? 
-                                               (parent.pressed ? Qt.darker(inputBgColor, 1.1) : 
-                                                parent.hovered ? Qt.lighter(inputBgColor, 1.1) : inputBgColor) :
-                                               borderColor
-                                        border.color: borderColor
-                                        border.width: 1
-                                        radius: 4
-                                    }
-                                    
-                                    contentItem: Text {
-                                        text: parent.text
-                                        color: parent.enabled ? textColor : secondaryTextColor
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                        font.bold: true
-                                    }
-                                    
                                     onClicked: mibFolderDialog.open()
+                                    background: secondaryButtonBackground
+                                    contentItem: buttonText
                                 }
-                                
+
                                 Button {
                                     Layout.fillWidth: true
                                     text: "Compile MIBs"
                                     enabled: !controller.isCompiling && controller.settings.mibPath
-                                    
-                                    background: Rectangle {
-                                        color: parent.enabled ? 
-                                               (parent.pressed ? Qt.darker(inputBgColor, 1.1) : 
-                                                parent.hovered ? Qt.lighter(inputBgColor, 1.1) : inputBgColor) :
-                                               borderColor
-                                        border.color: borderColor
-                                        border.width: 1
-                                        radius: 4
-                                    }
-                                    
-                                    contentItem: Text {
-                                        text: parent.text
-                                        color: parent.enabled ? textColor : secondaryTextColor
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                        font.bold: true
-                                    }
-                                    
                                     onClicked: controller.compileMibs()
+                                    background: secondaryButtonBackground
+                                    contentItem: buttonText
                                 }
                             }
                         }
                     }
-                    
-                    // Spacer
+
                     Item {
                         Layout.fillHeight: true
                         Layout.minimumHeight: 20
                     }
-                    
-                    // Connect Button
+
                     Button {
                         Layout.fillWidth: true
                         text: "CONNECT DEVICE"
                         enabled: !controller.isScanning
-                        
+                        onClicked: controller.startScan()
                         background: Rectangle {
-                            color: parent.enabled ? 
-                                   (parent.pressed ? "#3d8b40" : 
-                                    parent.hovered ? "#45a049" : accentColor) :
+                            color: parent.enabled ?
+                                   (parent.pressed ? "#007C89" : parent.hovered ? "#00ACC1" : accentColor) :
                                    borderColor
-                            radius: 4
+                            radius: 6
                         }
-                        
                         contentItem: Text {
                             text: parent.text
                             color: "white"
@@ -432,24 +345,19 @@ ApplicationWindow {
                             verticalAlignment: Text.AlignVCenter
                             font.bold: true
                         }
-                        
-                        onClicked: controller.startScan()
                     }
-                    
-                    // Abort Button
+
                     Button {
                         Layout.fillWidth: true
                         text: "ABORT SCAN"
                         enabled: controller.isScanning
-                        
+                        onClicked: controller.stopScan()
                         background: Rectangle {
-                            color: parent.enabled ? 
-                                   (parent.pressed ? "#c62828" : 
-                                    parent.hovered ? "#e53935" : "#F44336") :
+                            color: parent.enabled ?
+                                   (parent.pressed ? "#c62828" : parent.hovered ? "#e53935" : "#F44336") :
                                    borderColor
-                            radius: 4
+                            radius: 6
                         }
-                        
                         contentItem: Text {
                             text: parent.text
                             color: parent.enabled ? "white" : secondaryTextColor
@@ -457,68 +365,46 @@ ApplicationWindow {
                             verticalAlignment: Text.AlignVCenter
                             font.bold: true
                         }
-                        
-                        onClicked: controller.stopScan()
                     }
-                    
-                    // Export Button
+
                     Button {
                         Layout.fillWidth: true
                         text: "EXPORT SNAPSHOT"
                         enabled: controller.canExport
-                        
-                        background: Rectangle {
-                            color: parent.enabled ? 
-                                   (parent.pressed ? Qt.darker(inputBgColor, 1.1) : 
-                                    parent.hovered ? Qt.lighter(inputBgColor, 1.1) : inputBgColor) :
-                                   borderColor
-                            border.color: borderColor
-                            border.width: 1
-                            radius: 4
-                        }
-                        
-                        contentItem: Text {
-                            text: parent.text
-                            color: parent.enabled ? textColor : secondaryTextColor
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            font.bold: true
-                        }
-                        
                         onClicked: exportFileDialog.open()
+                        background: secondaryButtonBackground
+                        contentItem: buttonText
                     }
                 }
             }
         }
-        
-        // Right Panel - Tree View
+
         Rectangle {
             SplitView.fillWidth: true
             color: panelColor
-            
+
             ColumnLayout {
                 anchors.fill: parent
                 spacing: 0
-                
-                // Tree Header
+
                 Rectangle {
                     Layout.fillWidth: true
                     height: 36
                     color: headerBgColor
-                    
+
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 10
                         anchors.rightMargin: 10
                         spacing: 0
-                        
+
                         Label {
                             text: "OID / Parameter"
                             color: secondaryTextColor
                             font.bold: true
                             Layout.preferredWidth: 450
                         }
-                        
+
                         Label {
                             text: "Value"
                             color: secondaryTextColor
@@ -527,8 +413,7 @@ ApplicationWindow {
                         }
                     }
                 }
-                
-                // Tree View
+
                 TreeView {
                     id: treeView
                     Layout.fillWidth: true
@@ -536,29 +421,24 @@ ApplicationWindow {
                     model: controller.treeModel
                     clip: true
                     alternatingRows: true
-                    
-                    selectionModel: ItemSelectionModel {
-                        model: treeView.model
-                    }
-                    
+
+                    selectionModel: ItemSelectionModel { model: treeView.model }
+
                     delegate: Item {
                         id: treeDelegate
                         implicitWidth: treeView.width
                         implicitHeight: 32
-                        
+
                         required property TreeView treeView
-                        required property bool isTreeNode
                         required property bool expanded
                         required property bool hasChildren
                         required property int depth
                         required property int row
-                        required property int column
                         required property bool current
-                        required property bool selected
                         required property var model
-                        
+
                         readonly property real indent: 20
-                        
+
                         Rectangle {
                             anchors.fill: parent
                             color: {
@@ -569,18 +449,17 @@ ApplicationWindow {
                                 return panelColor
                             }
                         }
-                        
+
                         RowLayout {
                             anchors.fill: parent
                             anchors.leftMargin: 5
                             anchors.rightMargin: 5
                             spacing: 5
-                            
-                            // Indentation and expand indicator
+
                             Item {
                                 width: treeDelegate.depth * treeDelegate.indent + (treeDelegate.hasChildren ? 20 : 0)
                                 height: parent.height
-                                
+
                                 Text {
                                     visible: treeDelegate.hasChildren
                                     anchors.right: parent.right
@@ -588,15 +467,14 @@ ApplicationWindow {
                                     text: treeDelegate.expanded ? "▼" : "▶"
                                     color: secondaryTextColor
                                     font.pixelSize: 10
-                                    
+
                                     MouseArea {
                                         anchors.fill: parent
                                         onClicked: treeView.toggleExpanded(treeDelegate.row)
                                     }
                                 }
                             }
-                            
-                            // OID/Name column
+
                             Text {
                                 Layout.preferredWidth: 450 - treeDelegate.depth * treeDelegate.indent - (treeDelegate.hasChildren ? 20 : 0)
                                 text: treeDelegate.model.oid || ""
@@ -604,16 +482,16 @@ ApplicationWindow {
                                 font.bold: treeDelegate.hasChildren
                                 elide: Text.ElideRight
                                 verticalAlignment: Text.AlignVCenter
-                                
+
                                 ToolTip.visible: truncated && oidMouseArea.containsMouse
                                 ToolTip.text: treeDelegate.model.oid || ""
-                                
+
                                 MouseArea {
                                     id: oidMouseArea
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    
+
                                     onClicked: function(mouse) {
                                         if (mouse.button === Qt.RightButton) {
                                             contextMenu.currentValue = treeDelegate.model.value || ""
@@ -625,24 +503,23 @@ ApplicationWindow {
                                     }
                                 }
                             }
-                            
-                            // Value column
+
                             Text {
                                 Layout.fillWidth: true
                                 text: treeDelegate.model.value || ""
                                 color: textColor
                                 elide: Text.ElideRight
                                 verticalAlignment: Text.AlignVCenter
-                                
+
                                 ToolTip.visible: truncated && valueMouseArea.containsMouse
                                 ToolTip.text: "Raw: " + (treeDelegate.model.rawValue || "")
-                                
+
                                 MouseArea {
                                     id: valueMouseArea
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     acceptedButtons: Qt.RightButton
-                                    
+
                                     onClicked: function(mouse) {
                                         if (mouse.button === Qt.RightButton) {
                                             contextMenu.currentValue = treeDelegate.model.value || ""
@@ -655,13 +532,12 @@ ApplicationWindow {
                         }
                     }
                 }
-                
-                // Status Bar
+
                 Rectangle {
                     Layout.fillWidth: true
                     height: 30
                     color: isDarkTheme ? "#0d0d0d" : "#E0E0E0"
-                    
+
                     Label {
                         anchors.left: parent.left
                         anchors.leftMargin: 10
@@ -670,7 +546,7 @@ ApplicationWindow {
                         color: secondaryTextColor
                         font.pixelSize: 12
                     }
-                    
+
                     Label {
                         anchors.right: parent.right
                         anchors.rightMargin: 10
@@ -684,51 +560,55 @@ ApplicationWindow {
             }
         }
     }
-    
-    // Context Menu
+
     Menu {
         id: contextMenu
-        
         property string currentValue: ""
         property string currentRawValue: ""
-        
+
         background: Rectangle {
             implicitWidth: 150
             color: panelColor
             border.color: borderColor
             radius: 4
         }
-        
+
         MenuItem {
             text: "Copy Value"
-            onTriggered: {
-                controller.copyToClipboard(contextMenu.currentValue)
-            }
-            
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.3) : "transparent"
-            }
-            
-            contentItem: Text {
-                text: parent.text
-                color: textColor
-            }
+            onTriggered: controller.copyToClipboard(contextMenu.currentValue)
+            background: Rectangle { color: parent.highlighted ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.3) : "transparent" }
+            contentItem: Text { text: parent.text; color: textColor }
         }
-        
+
         MenuItem {
             text: "Copy Raw Value"
-            onTriggered: {
-                controller.copyToClipboard(contextMenu.currentRawValue)
-            }
-            
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.3) : "transparent"
-            }
-            
-            contentItem: Text {
-                text: parent.text
-                color: textColor
-            }
+            onTriggered: controller.copyToClipboard(contextMenu.currentRawValue)
+            background: Rectangle { color: parent.highlighted ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.3) : "transparent" }
+            contentItem: Text { text: parent.text; color: textColor }
         }
+    }
+
+    component InputBackground: Rectangle {
+        color: inputBgColor
+        border.color: parent.activeFocus ? accentColor : borderColor
+        border.width: parent.activeFocus ? 2 : 1
+        radius: 5
+    }
+
+    component SecondaryButtonBackground: Rectangle {
+        color: parent.enabled ?
+               (parent.pressed ? Qt.darker(inputBgColor, 1.1) : parent.hovered ? Qt.lighter(inputBgColor, 1.1) : inputBgColor) :
+               borderColor
+        border.color: borderColor
+        border.width: 1
+        radius: 6
+    }
+
+    component ButtonText: Text {
+        text: parent.text
+        color: parent.enabled ? textColor : secondaryTextColor
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+        font.bold: true
     }
 }
