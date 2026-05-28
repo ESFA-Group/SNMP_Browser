@@ -16,6 +16,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Quick
     QuickControls2
     Concurrent
+    Svg
 )
 
 set(NET_SNMP_SEARCH_HINTS)
@@ -96,6 +97,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Concurrent
+    Qt6::Svg
     ${NET_SNMP_LIB}
 )
 
