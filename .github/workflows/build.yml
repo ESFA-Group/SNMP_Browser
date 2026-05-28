@@ -39,6 +39,11 @@ jobs:
           sudo apt-get install -y \
             qt6-base-dev \
             qt6-declarative-dev \
+            qml6-module-qtquick \
+            qml6-module-qtquick-controls \
+            qml6-module-qtquick-layouts \
+            qml6-module-qtquick-dialogs \
+            qml6-module-qt-labs-platform \
             libsnmp-dev \
             cmake \
             build-essential \
@@ -103,6 +108,15 @@ jobs:
           echo "QMAKE=$QMAKE" >> "$GITHUB_ENV"
           "$QMAKE" --version
 
+      - name: Verify Qt QML modules
+        run: |
+          QT_QML_DIR="$($QMAKE -query QT_INSTALL_QML)"
+          echo "QT_QML_DIR=$QT_QML_DIR" >> "$GITHUB_ENV"
+          test -f "$QT_QML_DIR/QtQuick/Controls/libqtquickcontrols2plugin.so"
+          test -f "$QT_QML_DIR/QtQuick/Layouts/libqquicklayoutsplugin.so"
+          test -f "$QT_QML_DIR/QtQuick/Dialogs/libdialogsquickplugin.so"
+          test -f "$QT_QML_DIR/Qt/labs/platform/libqtlabsplatformplugin.so"
+
       - name: Download linuxdeploy
         run: |
           wget -q -O linuxdeploy.AppImage \
@@ -115,6 +129,7 @@ jobs:
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
           QML_SOURCES_PATHS: ${{ github.workspace }}/resources/qml
+          QML_MODULES_PATHS: ${{ env.QT_QML_DIR }}
           OUTPUT: ${{ env.APP_NAME }}-${{ env.APP_VERSION }}-linux-${{ matrix.arch }}.AppImage
         run: |
           ./linuxdeploy.AppImage \
