@@ -159,17 +159,21 @@ jobs:
             D:\a\_temp\msys64\mingw64\lib\pkgconfig\netsnmp*.pc
             D:\a\_temp\msys64\mingw64\bin\libnetsnmp*.dll
             D:\a\_temp\msys64\mingw64\bin\net-snmp-config
-          key: netsnmp-${{ env.NETSNMP_VERSION }}-mingw64-v1
+          key: netsnmp-${{ env.NETSNMP_VERSION }}-mingw64-shared-v2
 
-      - name: Build net-snmp from source
+      - name: Build net-snmp from source (shared library)
         if: steps.cache-netsnmp.outputs.cache-hit != 'true'
         run: |
           wget -q "https://sourceforge.net/projects/net-snmp/files/net-snmp/${NETSNMP_VERSION}/net-snmp-${NETSNMP_VERSION}.tar.gz/download" \
                -O net-snmp.tar.gz
           tar xzf net-snmp.tar.gz
           cd net-snmp-${NETSNMP_VERSION}
+          # --enable-shared / --disable-static: produce libnetsnmp-XX.dll so OpenSSL +
+          # regex are resolved when the DLL itself is linked, not deferred to consumers.
           ./configure \
             --prefix=/mingw64 \
+            --enable-shared \
+            --disable-static \
             --with-default-snmp-version=3 \
             --with-openssl \
             --disable-agent \
