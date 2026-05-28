@@ -1,0 +1,198 @@
+name: Build and Package
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+env:
+  APP_NAME: SNMPBrowser
+  APP_VERSION: "1.0.0"
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # Linux  (x86_64 on ubuntu-24.04,  arm64 on ubuntu-24.04-arm)
+  # ──────────────────────────────────────────────────────────────
+  build-linux:
+    name: Linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+            deploy_arch: x86_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            deploy_arch: aarch64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            qt6-base-dev \
+            qt6-declarative-dev \
+            libsnmp-dev \
+            cmake \
+            build-essential \
+            libgl-dev \
+            patchelf \
+            imagemagick \
+            wget
+
+      - name: Configure
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Install to AppDir
+        run: DESTDIR="${{ github.workspace }}/AppDir" cmake --install build
+
+      - name: Prepare AppDir metadata
+        run: |
+          mkdir -p AppDir/usr/share/applications
+          cat > AppDir/usr/share/applications/snmpbrowser.desktop << 'EOF'
+          [Desktop Entry]
+          Name=SNMP Browser
+          Exec=SNMPBrowser
+          Icon=snmpbrowser
+          Type=Application
+          Categories=Network;Utility;
+          Comment=SNMPv3 network browser
+          EOF
+
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          convert -size 256x256 xc:"#1565C0" \
+            -fill white -gravity Center \
+            -font DejaVu-Sans-Bold -pointsize 44 \
+            -annotate 0 "SNMP" \
+            AppDir/usr/share/icons/hicolor/256x256/apps/snmpbrowser.png
+
+      - name: Locate qmake6
+        run: |
+          QMAKE=$(command -v qmake6 2>/dev/null || command -v qmake 2>/dev/null)
+          echo "QMAKE=$QMAKE" >> "$GITHUB_ENV"
+          "$QMAKE" --version
+
+      - name: Download linuxdeploy
+        run: |
+          wget -q -O linuxdeploy.AppImage \
+            "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${{ matrix.deploy_arch }}.AppImage"
+          wget -q -O linuxdeploy-plugin-qt.AppImage \
+            "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-${{ matrix.deploy_arch }}.AppImage"
+          chmod +x linuxdeploy.AppImage linuxdeploy-plugin-qt.AppImage
+
+      - name: Create AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          QML_SOURCES_PATHS: ${{ github.workspace }}/resources/qml
+        run: |
+          ./linuxdeploy.AppImage \
+            --appdir AppDir \
+            --plugin qt \
+            --output appimage
+          mv *.AppImage ${{ env.APP_NAME }}-${{ env.APP_VERSION }}-linux-${{ matrix.arch }}.AppImage
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-linux-${{ matrix.arch }}
+          path: ${{ env.APP_NAME }}-*-linux-${{ matrix.arch }}.AppImage
+
+  # ──────────────────────────────────────────────────────────────
+  # Windows x86_64  (MSVC 2022, Qt via aqtinstall, InnoSetup)
+  # ──────────────────────────────────────────────────────────────
+  build-windows:
+    name: Windows x86_64
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt 6
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.8.1'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: C:\vcpkg\installed
+          key: vcpkg-net-snmp-x64-windows-${{ hashFiles('**/CMakeLists.txt') }}
+          restore-keys: vcpkg-net-snmp-x64-windows-
+
+      - name: Install net-snmp (vcpkg)
+        run: vcpkg install net-snmp:x64-windows
+
+      - name: Configure
+        run: |
+          cmake -B build `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
+            -DVCPKG_TARGET_TRIPLET=x64-windows
+
+      - name: Build
+        run: cmake --build build --config Release -j $env:NUMBER_OF_PROCESSORS
+
+      - name: Deploy Qt runtime
+        run: |
+          windeployqt `
+            --release `
+            --qmldir resources/qml `
+            --no-translations `
+            build\Release\${{ env.APP_NAME }}.exe
+
+      - name: Copy vcpkg runtime DLLs
+        run: |
+          Get-ChildItem C:\vcpkg\installed\x64-windows\bin\*.dll |
+            Copy-Item -Destination build\Release\
+
+      - name: Build installer (InnoSetup)
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            /DMyAppVersion=${{ env.APP_VERSION }} `
+            installer\windows.iss
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-windows-x86_64
+          path: installer\output\*.exe
+
+  # ──────────────────────────────────────────────────────────────
+  # GitHub Release  (runs only on version tags, e.g. v1.0.0)
+  # ──────────────────────────────────────────────────────────────
+  release:
+    name: Create Release
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
