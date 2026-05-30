@@ -422,7 +422,7 @@ ApplicationWindow {
                     model: controller.treeModel
                     clip: true
                     alternatingRows: true
-
+                    flickableDirection: Flickable.VerticalFlick
                     selectionModel: ItemSelectionModel { model: treeView.model }
 
                     delegate: Item {
