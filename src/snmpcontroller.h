@@ -7,6 +7,7 @@
 #include <QUrl>
 #include "deviceconfig.h"
 #include "treemodel.h"
+#include "treefilterproxymodel.h"
 #include "settingsmanager.h"
 
 class SnmpWorker;
@@ -19,6 +20,7 @@ class SnmpController : public QObject
     Q_PROPERTY(bool isCompiling READ isCompiling NOTIFY isCompilingChanged)
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusMessageChanged)
     Q_PROPERTY(TreeModel* treeModel READ treeModel CONSTANT)
+    Q_PROPERTY(TreeFilterProxyModel* proxyModel READ proxyModel CONSTANT)
     Q_PROPERTY(SettingsManager* settings READ settings CONSTANT)
     Q_PROPERTY(bool canExport READ canExport NOTIFY canExportChanged)
 
@@ -30,6 +32,7 @@ public:
     bool isCompiling() const;
     QString statusMessage() const;
     TreeModel* treeModel() const;
+    TreeFilterProxyModel* proxyModel() const;
     SettingsManager* settings() const;
     bool canExport() const;
 
@@ -67,6 +70,7 @@ private:
     QString m_statusMessage;
     
     TreeModel* m_treeModel;
+    TreeFilterProxyModel* m_proxyModel;
     SettingsManager* m_settings;
     
     QThread* m_workerThread;

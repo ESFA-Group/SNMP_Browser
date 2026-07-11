@@ -18,12 +18,14 @@ SnmpController::SnmpController(QObject* parent)
     , m_isCompiling(false)
     , m_statusMessage("Ready to connect")
     , m_treeModel(new TreeModel(this))
+    , m_proxyModel(new TreeFilterProxyModel(this))
     , m_settings(new SettingsManager(this))
     , m_workerThread(nullptr)
     , m_worker(nullptr)
     , m_compilerThread(nullptr)
     , m_compiler(nullptr)
 {
+    m_proxyModel->setSourceModel(m_treeModel);
 }
 
 SnmpController::~SnmpController()
@@ -50,6 +52,11 @@ QString SnmpController::statusMessage() const
 TreeModel* SnmpController::treeModel() const
 {
     return m_treeModel;
+}
+
+TreeFilterProxyModel* SnmpController::proxyModel() const
+{
+    return m_proxyModel;
 }
 
 SettingsManager* SnmpController::settings() const

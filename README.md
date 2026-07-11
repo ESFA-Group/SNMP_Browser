@@ -7,6 +7,12 @@ A cross-platform SNMP browser application built with Qt6/C++ and QML.
 - SNMPv3 support with authentication and privacy (MD5/DES)
 - MIB file loading and compilation
 - Tree view with grouped OID display
+- Live search/filter across OID names and values (Ctrl+F) with match counter
+- Color-coded values with type badges (NUM, STR, IP, MAC, HEX, TIME, OID)
+- Detail pane with full, selectable value and raw value for the selected object
+- Expand/collapse all (Ctrl+E / Ctrl+Shift+E), draggable column divider
+- Adjustable result text size (Ctrl+= / Ctrl+- / Ctrl+0)
+- One-click and right-click copy of OID, value, raw value, or whole row
 - Light/Dark theme support
 - Export to CSV/JSON
 - Persistent settings

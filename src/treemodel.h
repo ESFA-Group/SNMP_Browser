@@ -10,7 +10,8 @@
 class TreeItem
 {
 public:
-    explicit TreeItem(const QString& oid, const QString& value, const QString& rawValue, TreeItem* parent = nullptr);
+    explicit TreeItem(const QString& oid, const QString& value, const QString& rawValue,
+                      const QString& valueType = QString(), TreeItem* parent = nullptr);
     ~TreeItem();
 
     void appendChild(TreeItem* child);
@@ -19,6 +20,7 @@ public:
     int columnCount() const;
     QVariant data(int column) const;
     QString rawValue() const;
+    QString valueType() const;
     int row() const;
     TreeItem* parentItem();
     bool isGroup() const;
@@ -30,6 +32,7 @@ private:
     QString m_oid;
     QString m_value;
     QString m_rawValue;
+    QString m_valueType;
     TreeItem* m_parent;
     bool m_expanded;
 };
@@ -45,7 +48,9 @@ public:
         ValueRole,
         RawValueRole,
         IsGroupRole,
-        IsExpandedRole
+        IsExpandedRole,
+        ValueTypeRole,
+        ChildCountRole
     };
 
     explicit TreeModel(QObject* parent = nullptr);

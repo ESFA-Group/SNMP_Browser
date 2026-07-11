@@ -1,11 +1,43 @@
 #include "treemodel.h"
 #include <QDebug>
+#include <QRegularExpression>
+
+// Classify a variable binding by the type prefix net-snmp puts in the raw
+// value ("INTEGER: 5", "Timeticks: (123) ...", ...) so the UI can color-code
+// and badge values by kind.
+static QString detectValueType(const QString& rawValue, const QString& prettyValue)
+{
+    static const QRegularExpression macRe(
+        QStringLiteral("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"));
+    if (macRe.match(prettyValue).hasMatch())
+        return QStringLiteral("mac");
+
+    const int colon = rawValue.indexOf(':');
+    const QString prefix = colon > 0 ? rawValue.left(colon).trimmed() : QString();
+
+    if (prefix == "INTEGER" || prefix == "Counter32" || prefix == "Counter64" ||
+        prefix == "Gauge32" || prefix == "Unsigned32" || prefix == "UInteger32")
+        return QStringLiteral("number");
+    if (prefix == "STRING")
+        return QStringLiteral("text");
+    if (prefix == "Hex-STRING" || prefix == "BITS" || prefix == "Opaque")
+        return QStringLiteral("hex");
+    if (prefix == "IpAddress" || prefix == "Network Address")
+        return QStringLiteral("ip");
+    if (prefix == "Timeticks")
+        return QStringLiteral("time");
+    if (prefix == "OID" || prefix == "OBJECT IDENTIFIER")
+        return QStringLiteral("oid");
+    return QStringLiteral("other");
+}
 
 // TreeItem implementation
-TreeItem::TreeItem(const QString& oid, const QString& value, const QString& rawValue, TreeItem* parent)
+TreeItem::TreeItem(const QString& oid, const QString& value, const QString& rawValue,
+                   const QString& valueType, TreeItem* parent)
     : m_oid(oid)
     , m_value(value)
     , m_rawValue(rawValue)
+    , m_valueType(valueType)
     , m_parent(parent)
     , m_expanded(true)
 {
@@ -50,6 +82,11 @@ QVariant TreeItem::data(int column) const
 QString TreeItem::rawValue() const
 {
     return m_rawValue;
+}
+
+QString TreeItem::valueType() const
+{
+    return m_valueType;
 }
 
 int TreeItem::row() const
@@ -101,6 +138,8 @@ QHash<int, QByteArray> TreeModel::roleNames() const
     roles[RawValueRole] = "rawValue";
     roles[IsGroupRole] = "isGroup";
     roles[IsExpandedRole] = "isExpanded";
+    roles[ValueTypeRole] = "valueType";
+    roles[ChildCountRole] = "childCount";
     roles[Qt::DisplayRole] = "display";
     return roles;
 }
@@ -173,6 +212,10 @@ QVariant TreeModel::data(const QModelIndex& index, int role) const
             return item->isGroup();
         case IsExpandedRole:
             return item->isExpanded();
+        case ValueTypeRole:
+            return item->valueType();
+        case ChildCountRole:
+            return item->childCount();
         default:
             return QVariant();
     }
@@ -206,7 +249,7 @@ TreeItem* TreeModel::findOrCreateGroup(const QString& groupName)
     int row = m_rootItem->childCount();
     beginInsertRows(QModelIndex(), row, row);
     
-    TreeItem* groupItem = new TreeItem(groupName, "", "", m_rootItem);
+    TreeItem* groupItem = new TreeItem(groupName, "", "", "", m_rootItem);
     m_rootItem->appendChild(groupItem);
     m_groups[groupName] = groupItem;
     
@@ -235,12 +278,16 @@ void TreeModel::addItem(const QString& oid, const QString& rawValue, const QStri
     int row = groupItem->childCount();
     
     beginInsertRows(parentIndex, row, row);
-    
-    TreeItem* childItem = new TreeItem(displayText, prettyValue, rawValue, groupItem);
+
+    TreeItem* childItem = new TreeItem(displayText, prettyValue, rawValue,
+                                       detectValueType(rawValue, prettyValue), groupItem);
     groupItem->appendChild(childItem);
-    
+
     endInsertRows();
-    
+
+    // Keep the group's child-count badge in the view up to date.
+    emit dataChanged(parentIndex, parentIndex, {ChildCountRole});
+
     m_itemCount++;
     emit itemCountChanged();
 }
@@ -250,7 +297,7 @@ void TreeModel::clear()
     beginResetModel();
     
     delete m_rootItem;
-    m_rootItem = new TreeItem("Root", "", "");
+    m_rootItem = new TreeItem("Root", "", "", "");
     m_groups.clear();
     m_itemCount = 0;
     

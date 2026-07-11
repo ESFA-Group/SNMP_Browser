@@ -56,6 +56,7 @@ set(SOURCES
     src/snmpworker.cpp
     src/mibcompilerworker.cpp
     src/treemodel.cpp
+    src/treefilterproxymodel.cpp
     src/settingsmanager.cpp
 )
 
@@ -64,6 +65,7 @@ set(HEADERS
     src/snmpworker.h
     src/mibcompilerworker.h
     src/treemodel.h
+    src/treefilterproxymodel.h
     src/settingsmanager.h
     src/deviceconfig.h
 )
