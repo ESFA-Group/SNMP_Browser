@@ -9,7 +9,9 @@
 #define MyAppName      "SNMP Browser"
 #define MyAppPublisher "ESFA Group"
 #define MyAppExeName   "SNMPBrowser.exe"
-#define MyAppSourceDir "..\dist"
+#ifndef MyAppSourceDir
+  #define MyAppSourceDir "..\dist"
+#endif
 #define MyOutputDir    "output"
 
 [Setup]
@@ -26,6 +28,7 @@ OutputBaseFilename=SNMPBrowser-Setup-{#MyAppVersion}-x86_64
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+UninstallDisplayIcon={app}\{#MyAppExeName}
 ; Require 64-bit Windows 10+
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -42,8 +45,14 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; \
 ; Main executable
 Source: "{#MyAppSourceDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
+; MSVC runtime redistributable (deployed by windeployqt --compiler-runtime).
+; Extracted to {tmp} and installed from [Run]; not kept in {app}.
+Source: "{#MyAppSourceDir}\vc_redist.x64.exe"; DestDir: "{tmp}"; \
+  Flags: deleteafterinstall skipifsourcedoesntexist
+
 ; Qt DLLs and all plugin/QML subdirectories deployed by windeployqt
 Source: "{#MyAppSourceDir}\*"; DestDir: "{app}"; \
+  Excludes: "vc_redist.x64.exe"; \
   Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
@@ -53,6 +62,13 @@ Name: "{autodesktop}\{#MyAppName}";           Filename: "{app}\{#MyAppExeName}";
   Tasks: desktopicon
 
 [Run]
+; Install the MSVC runtime quietly before offering to launch the app.
+; /norestart + exit code 3010 (reboot required) must not abort the install.
+Filename: "{tmp}\vc_redist.x64.exe"; \
+  Parameters: "/install /quiet /norestart"; \
+  StatusMsg: "Installing Microsoft Visual C++ Runtime..."; \
+  Flags: skipifdoesntexist waituntilterminated
+
 Filename: "{app}\{#MyAppExeName}"; \
   Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; \
   Flags: nowait postinstall skipifsilent

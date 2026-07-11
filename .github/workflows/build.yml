@@ -32,6 +32,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Resolve version from tag
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          fi
+
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -169,6 +176,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve version from tag
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          fi
 
       - name: Setup MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
@@ -360,18 +374,45 @@ jobs:
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item build\SNMPBrowser.exe dist\
 
-          # Qt runtime + QML modules
+          # Qt runtime + QML modules. --compiler-runtime drops vc_redist.x64.exe
+          # into dist so the installer can set up the MSVC runtime on machines
+          # that do not have it. The app forces the software scene graph on
+          # Windows, so the opengl32sw fallback DLL is dead weight.
           windeployqt --release `
             --qmldir resources/qml `
             --no-translations `
+            --no-opengl-sw `
+            --compiler-runtime `
             dist\SNMPBrowser.exe
 
           # net-snmp DLL + OpenSSL DLLs
           Copy-Item "${{ env.NETSNMP_PREFIX }}\bin\*.dll" dist\
-          Copy-Item "${{ env.OPENSSL_DIR }}\bin\libssl-*.dll" dist\ -ErrorAction SilentlyContinue
-          Copy-Item "${{ env.OPENSSL_DIR }}\bin\libcrypto-*.dll" dist\ -ErrorAction SilentlyContinue
+          Copy-Item "${{ env.OPENSSL_DIR }}\bin\libssl-*.dll" dist\
+          Copy-Item "${{ env.OPENSSL_DIR }}\bin\libcrypto-*.dll" dist\
 
           Get-ChildItem dist\
+
+      - name: Verify deployment completeness
+        shell: pwsh
+        run: |
+          $missing = @()
+          foreach ($f in @("SNMPBrowser.exe", "Qt6Core.dll", "Qt6Gui.dll",
+                           "Qt6Qml.dll", "Qt6Quick.dll", "Qt6QuickControls2.dll",
+                           "netsnmp.dll", "vc_redist.x64.exe")) {
+            if (-not (Test-Path "dist\$f")) { $missing += $f }
+          }
+          foreach ($d in @("dist\qml\QtQuick", "dist\qml\QtQuick\Controls",
+                           "dist\qml\QtQuick\Dialogs", "dist\platforms")) {
+            if (-not (Test-Path $d)) { $missing += $d }
+          }
+          if (-not (Get-ChildItem "dist\libssl-*.dll" -ErrorAction SilentlyContinue)) { $missing += "libssl-*.dll" }
+          if (-not (Get-ChildItem "dist\libcrypto-*.dll" -ErrorAction SilentlyContinue)) { $missing += "libcrypto-*.dll" }
+          if ($missing.Count -gt 0) {
+            Write-Host "Deployment is missing:" -ForegroundColor Red
+            $missing | ForEach-Object { Write-Host "  $_" }
+            exit 1
+          }
+          Write-Host "All required runtime files present."
 
       - name: Build installer (InnoSetup)
         shell: pwsh
